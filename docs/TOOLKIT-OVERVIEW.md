@@ -12,7 +12,7 @@ User-facing modes:
 2. **Audit existing localization** — `audit`, and `kit export --scope untranslated|missing|changed`.
 3. **Import + build** — `kit import`, then `build` (strict or partial).
 4. **Version migration** — `migrate`.
-5. **Runtime validation** (optional) — `runtime` (see `RUNTIME-VALIDATION.md`).
+5. **Runtime validation** (optional) — `runtime/android/test-localization-runtime.mjs` (see `RUNTIME-VALIDATION.md`).
 
 Supporting (not user modes): target/version detection, canonical inventory, text
 classification, a deterministic structure cache, structural protection,

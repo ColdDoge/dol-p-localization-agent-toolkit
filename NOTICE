@@ -11,9 +11,9 @@ tooling (not vendored, not bundled, not required for offline use):
   MIT License. Used only as an optional external tool for on-device inspection
   (screenshots / layout / app-data backup). Not included in this repository.
 
-* vrelnir_localization (Degrees of Lewdity community localization tooling)
-  MIT License. Referenced for localization-rule knowledge only. Not included
-  and not executed by this toolkit.
+* vrelnir_localization (https://github.com/NumberSir/vrelnir_localization)
+  MIT License, Copyright (c) 2023 Number_Sir. Referenced for localization-rule
+  knowledge only. Not included and not executed by this toolkit.
 
 * Paisley Park and adb / Android CLI / Chrome DevTools Protocol are separate
   external tools. Each is governed by its own license and terms.

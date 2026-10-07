@@ -96,3 +96,18 @@ test('E2E: audit classifies missing text', () => {
   assert.equal(report.classifications.missing, fx.units.length);
   assert.equal(report.strictPass, false);
 });
+
+test('CLI: --help exits 0 and lists the public commands', () => {
+  const help = cli(['--help']);
+  assert.equal(help.code, 0, help.stderr);
+  for (const cmd of ['inventory', 'audit', 'kit export', 'kit import', 'build', 'qa', 'migrate', 'selftest']) {
+    assert.ok(help.stdout.includes(cmd), `help should mention: ${cmd}`);
+  }
+  assert.ok(!/pilot|Phase 2|production\/default/.test(help.stdout));
+});
+
+test('CLI: an unknown command exits non-zero without a stack trace', () => {
+  const bad = cli(['frobnicate']);
+  assert.equal(bad.code, 2, bad.stdout);
+  assert.ok(!/\bat .*\.mjs:\d+/.test(bad.stderr), 'no internal stack trace on a bad command');
+});

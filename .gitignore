@@ -12,6 +12,17 @@ production/
 # Node
 node_modules/
 npm-debug.log*
+*.log
+
+# Secrets, signing material, device artifacts
+.env
+.env.*
+*.apk
+*.keystore
+*.jks
+
+# Optional upstream source clone (provenance only)
+_upstream/
 
 # Editors / OS
 .DS_Store

@@ -35,6 +35,36 @@ import { loadLocalizationSource, validateLocalizationSource } from './lib/locali
 import { runKitExport, writeKit, runKitImport } from './lib/kit-run.mjs';
 import { buildStructureCache, exportStructureCache, importStructureCache, structureCacheCompatible } from './lib/structure-cache.mjs';
 
+const USAGE = `DoL/DoLP Localization Agent Toolkit — offline entry point
+
+Usage: node core/src/run.mjs <command> [options]
+
+Commands:
+  inventory    --story <index.html> [--source-version <v>] [--out <inventory.json>]
+  audit        --story <index.html> [--state <state.jsonl>] [--localization <src>] [--report <report.json>]
+  kit export   --story <index.html> --output <kit.zip> [--scope all|untranslated|missing|changed]
+               [--state <state.jsonl>] [--localization <src>] [--glossary <glossary.csv>]
+               [--limit N] [--target-language <tag>] [--source-version <v>]
+  kit import   <kit.zip> --story <index.html> --out <state.jsonl> [--require-complete] [--report <report.json>]
+  build        --story <index.html> --state <state.jsonl> --output <pack.mod.zip>
+               [--mode strict|partial] [--report <report.json>] [--name <n>] [--pack-version <v>]
+  qa           --story <index.html> --state <state.jsonl> [--report <report.json>]
+  migrate      --story <index.html> --state <old.jsonl> --out <new.jsonl> [--report <report.json>]
+  cache export --story <index.html> --output <structure-cache.zip> [--source-version <v>]
+  cache import <structure-cache.zip> --story <index.html> [--report <report.json>]
+  selftest
+
+All commands above are offline and never touch a device. --story points at the
+compiled assets/www/index.html of your target build.
+
+Optional on-device validation lives under runtime/:
+  node runtime/localization_smoke_build.mjs --story <index.html> --state <state.jsonl>
+  node runtime/android/doctor.mjs
+  node runtime/android/test-localization-runtime.mjs --level smoke
+
+See docs/TOOLKIT-OVERVIEW.md and docs/RUNTIME-VALIDATION.md for details.
+`;
+
 function die(msg) { process.stderr.write(`error: ${msg}\n`); process.exit(2); }
 
 function prepare(storyPath, sourceVersion) {
@@ -311,7 +341,8 @@ async function cmdSelftest() {
 
 async function main() {
   const cmd = process.argv[2];
-  if (!cmd) die('no command. Try: selftest | inventory | audit | kit | build | qa | migrate | cache');
+  if (!cmd) die('no command. Try: selftest | inventory | audit | kit | build | qa | migrate | cache (or --help)');
+  if (cmd === '--help' || cmd === '-h' || cmd === 'help') { process.stdout.write(USAGE); return; }
   if (cmd === 'selftest') return cmdSelftest();
   if (cmd === 'inventory') return cmdInventory();
   if (cmd === 'audit') return cmdAudit();

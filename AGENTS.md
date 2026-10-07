@@ -20,7 +20,8 @@ schemas, and the examples are the actual contract.
   other specific script.
 * **Offline stays offline.** Inventory, audit, export, import, build, migrate,
   qa, and selftest must never probe ADB, Android CLI, Paisley Park, or a device.
-  Only an explicit `runtime` command may check those prerequisites.
+  Only the explicit runtime validation entry points under `runtime/` may check
+  those prerequisites.
 
 ## Working in this repo
 
