@@ -26,6 +26,12 @@ Work safely and treat the public repository as the contract.
    - never overwrite unrelated user files.
    If the toolkit is already present, fetch and fast-forward only. Do not rewrite
    local history or discard local changes.
+   Git boundary: by default, Git write/sync operations are allowed only for
+   this toolkit repository. Any game source, Mod project, third-party
+   repository, or other user project I provide is read-only unless I
+   explicitly ask you to modify that repository. Do not run git add, commit,
+   push, change remotes, switch or rewrite branches/history, rebase, reset, or
+   otherwise alter Git state in those repositories.
 
 2. Read README.md, AGENTS.md, docs/TOOLKIT-OVERVIEW.md,
    docs/AGENT-WORKFLOW.md, and docs/LOCALIZATION-KIT.md before operating.
@@ -75,6 +81,12 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
 1. If the current directory does not already contain the toolkit, clone it into
    an empty/dedicated folder. If it already exists, fetch and fast-forward only.
    Never overwrite unrelated files or discard local changes.
+   Git boundary: by default, Git write/sync operations are allowed only for
+   this toolkit repository. Any game source, Mod project, third-party
+   repository, or other user project I provide is read-only unless I
+   explicitly ask you to modify that repository. Do not run git add, commit,
+   push, change remotes, switch or rewrite branches/history, rebase, reset, or
+   otherwise alter Git state in those repositories.
 
 2. Read README.md, AGENTS.md, docs/TOOLKIT-OVERVIEW.md,
    docs/AGENT-WORKFLOW.md, docs/OPTIONS.md, and docs/LOCALIZATION-KIT.md.
@@ -126,6 +138,12 @@ with https://github.com/ColdDoge/dol-p-localization-agent-toolkit
 
 1. Start from a clean/dedicated folder. Clone the toolkit if needed; otherwise
    fetch and fast-forward only. Never delete or overwrite unrelated files.
+   Git boundary: by default, Git write/sync operations are allowed only for
+   this toolkit repository. Any game source, Mod project, third-party
+   repository, or other user project I provide is read-only unless I
+   explicitly ask you to modify that repository. Do not run git add, commit,
+   push, change remotes, switch or rewrite branches/history, rebase, reset, or
+   otherwise alter Git state in those repositories.
 
 2. Read README.md, AGENTS.md, docs/VERSION-MIGRATION.md,
    docs/AGENT-WORKFLOW.md, and docs/OPTIONS.md. Run the offline self-test first.
@@ -172,6 +190,12 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
 1. Clone the toolkit into an empty/dedicated folder if it is not already here.
    If it already exists, fetch and fast-forward only. Preserve all unrelated
    files and local changes.
+   Git boundary: by default, Git write/sync operations are allowed only for
+   this toolkit repository. Any game source, Mod project, third-party
+   repository, or other user project I provide is read-only unless I
+   explicitly ask you to modify that repository. Do not run git add, commit,
+   push, change remotes, switch or rewrite branches/history, rebase, reset, or
+   otherwise alter Git state in those repositories.
 
 2. Read README.md, AGENTS.md, docs/TOOLKIT-OVERVIEW.md,
    docs/PROTECTION-RULES.md, and docs/OPTIONS.md. Run:
@@ -220,6 +244,12 @@ device changes.
 1. Clone/sync the toolkit safely. Read README.md, AGENTS.md,
    docs/RUNTIME-VALIDATION.md, docs/RUNTIME-SMOKE-V1.md, and
    docs/RUNTIME-QA-MODES.md before touching a device.
+   Git boundary: by default, Git write/sync operations are allowed only for
+   this toolkit repository. Any game source, Mod project, third-party
+   repository, or other user project I provide is read-only unless I
+   explicitly ask you to modify that repository. Do not run git add, commit,
+   push, change remotes, switch or rewrite branches/history, rebase, reset, or
+   otherwise alter Git state in those repositories.
 
 2. Run the offline self-test and runtime unit tests first:
    node core/src/selftest.mjs
