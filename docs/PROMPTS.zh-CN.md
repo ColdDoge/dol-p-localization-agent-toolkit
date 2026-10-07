@@ -25,6 +25,10 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
    - 不要覆盖任何无关的用户文件。
    如果 toolkit 已经存在，只允许 fetch + fast-forward 更新。不要重写本地历史，
    也不要丢弃本地修改。
+   Git 操作边界：默认只有本 toolkit 仓库允许执行 clone / fetch / fast-forward
+   这类 Git 同步操作。任何我提供的游戏源码、Mod 项目、第三方仓库或其他用户项目
+   都默认只读，除非我明确要求你修改那个仓库。不得对这些仓库执行 git add、commit、
+   push、修改 remote、切换或重写分支/历史、rebase、reset，或其他会改变 Git 状态的操作。
 
 2. 操作前先阅读 README.md、AGENTS.md、docs/TOOLKIT-OVERVIEW.md、
    docs/AGENT-WORKFLOW.md、docs/LOCALIZATION-KIT.md。
@@ -69,6 +73,10 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
 1. 如果当前目录里还没有 toolkit，就在空目录/专用目录中 clone。
    如果已经存在，只允许 fetch + fast-forward 更新。
    不要覆盖无关文件，也不要丢弃本地修改。
+   Git 操作边界：默认只有本 toolkit 仓库允许执行 clone / fetch / fast-forward
+   这类 Git 同步操作。任何我提供的游戏源码、Mod 项目、第三方仓库或其他用户项目
+   都默认只读，除非我明确要求你修改那个仓库。不得对这些仓库执行 git add、commit、
+   push、修改 remote、切换或重写分支/历史、rebase、reset，或其他会改变 Git 状态的操作。
 
 2. 先阅读 README.md、AGENTS.md、docs/TOOLKIT-OVERVIEW.md、
    docs/AGENT-WORKFLOW.md、docs/OPTIONS.md、docs/LOCALIZATION-KIT.md。
@@ -115,6 +123,10 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
 
 1. 从干净/专用目录开始。需要时 clone toolkit；已经存在就只做 fetch + fast-forward。
    不要删除或覆盖无关文件。
+   Git 操作边界：默认只有本 toolkit 仓库允许执行 clone / fetch / fast-forward
+   这类 Git 同步操作。任何我提供的游戏源码、Mod 项目、第三方仓库或其他用户项目
+   都默认只读，除非我明确要求你修改那个仓库。不得对这些仓库执行 git add、commit、
+   push、修改 remote、切换或重写分支/历史、rebase、reset，或其他会改变 Git 状态的操作。
 
 2. 先阅读 README.md、AGENTS.md、docs/VERSION-MIGRATION.md、
    docs/AGENT-WORKFLOW.md、docs/OPTIONS.md，并先跑离线 selftest。
@@ -158,6 +170,10 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
 
 1. 当前目录没有 toolkit 时，就在空目录/专用目录中 clone。
    如果已经存在，只允许 fetch + fast-forward。保留所有无关文件与本地修改。
+   Git 操作边界：默认只有本 toolkit 仓库允许执行 clone / fetch / fast-forward
+   这类 Git 同步操作。任何我提供的游戏源码、Mod 项目、第三方仓库或其他用户项目
+   都默认只读，除非我明确要求你修改那个仓库。不得对这些仓库执行 git add、commit、
+   push、修改 remote、切换或重写分支/历史、rebase、reset，或其他会改变 Git 状态的操作。
 
 2. 先阅读 README.md、AGENTS.md、docs/TOOLKIT-OVERVIEW.md、
    docs/PROTECTION-RULES.md、docs/OPTIONS.md，然后运行：
@@ -200,6 +216,10 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
 1. 安全 clone / 同步 toolkit。接触设备前先阅读 README.md、AGENTS.md、
    docs/RUNTIME-VALIDATION.md、docs/RUNTIME-SMOKE-V1.md、
    docs/RUNTIME-QA-MODES.md。
+   Git 操作边界：默认只有本 toolkit 仓库允许执行 clone / fetch / fast-forward
+   这类 Git 同步操作。任何我提供的游戏源码、Mod 项目、第三方仓库或其他用户项目
+   都默认只读，除非我明确要求你修改那个仓库。不得对这些仓库执行 git add、commit、
+   push、修改 remote、切换或重写分支/历史、rebase、reset，或其他会改变 Git 状态的操作。
 
 2. 先运行离线 selftest 和 runtime 单元测试：
    node core/src/selftest.mjs
