@@ -39,9 +39,18 @@ Work safely and treat the public repository as the contract.
 3. Run the offline self-test first:
    node core/src/selftest.mjs
 
-4. Locate the compiled target story (normally assets/www/index.html).
-   If I have not supplied it or its path cannot be determined, ask me for that
-   exact file/path and do not guess.
+4. Resolve the real target story. In this toolkit, "target story" means the
+   target build's compiled `assets/www/index.html`; it is not a separate
+   narrative file.
+   - If I supplied an extracted game directory, use its
+     `assets/www/index.html`.
+   - If I supplied only an APK, use an ordinary archive tool to extract only
+     `assets/www/index.html` into `_work/` and use that copy. Do not modify
+     or rebuild the APK just to prepare this input.
+   - Do not use the repository's `examples/story/index.html` for a real game;
+     it is synthetic test data only.
+   - If I supplied neither an APK, an extracted game directory, nor the real
+     `index.html`, ask me for one of those inputs and do not guess.
 
 5. Keep user data and generated work out of Git history. Prefer external input
    paths or the git-ignored _local/ and _work/ directories.
@@ -92,8 +101,11 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
    docs/AGENT-WORKFLOW.md, docs/OPTIONS.md, and docs/LOCALIZATION-KIT.md.
    Run node core/src/selftest.mjs before using my data.
 
-3. Identify the current target story (normally assets/www/index.html) and the
-   existing localization input.
+3. Identify the current target story and the existing localization input.
+   "Target story" means the real target build's compiled
+   `assets/www/index.html`. If I supplied an APK instead of an extracted game
+   directory, extract only that file into `_work/` with a normal archive tool;
+   do not substitute `examples/story/index.html`, which is synthetic test data.
 
    Supported audit inputs are the public formats documented by the toolkit,
    especially state.jsonl or localization source JSON/JSONL / ModI18N TypeB
@@ -149,10 +161,13 @@ with https://github.com/ColdDoge/dol-p-localization-agent-toolkit
    docs/AGENT-WORKFLOW.md, and docs/OPTIONS.md. Run the offline self-test first.
 
 3. I need to provide:
-   - the NEW target compiled story (normally assets/www/index.html);
+   - the NEW target build, either as the real compiled
+     `assets/www/index.html`, an extracted game directory containing it, or an
+     APK from which that file can be extracted into `_work/`;
    - the OLD localization state.jsonl produced by this toolkit.
-   If either is missing, ask for it and stop. Do not fabricate a state file from
-   unsupported inputs.
+   The target story is specifically that compiled `index.html`, not the
+   repository's synthetic example. If either required input is missing, ask for
+   it and stop. Do not fabricate a state file from unsupported inputs.
 
 4. Keep all user inputs and migration outputs out of Git history.
 
@@ -201,10 +216,14 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
    docs/PROTECTION-RULES.md, and docs/OPTIONS.md. Run:
    node core/src/selftest.mjs
 
-3. Identify the target compiled story and my localization state.jsonl.
-   If I supplied a filled localization kit instead, import it to a state file
-   first using the documented kit workflow. If I supplied neither, ask for the
-   exact missing input instead of guessing.
+3. Identify the real target story and my localization state.jsonl.
+   The target story means the target build's compiled
+   `assets/www/index.html`. If I supplied an APK, extract only that file into
+   `_work/` with an ordinary archive tool. Never use
+   `examples/story/index.html` for a real build. If I supplied a filled
+   localization kit instead of a state file, import it first using the
+   documented kit workflow. If required input is still missing, ask me instead
+   of guessing.
 
 4. Keep all user data and generated packs/reports out of Git history.
 
@@ -256,7 +275,9 @@ device changes.
    node --test runtime/android/test/*.test.mjs
 
 3. A real smoke run requires:
-   - the real target story;
+   - the real target story, meaning the target build's compiled
+     `assets/www/index.html` (extract only that file from an APK into
+     `_work/` if needed);
    - a toolkit state.jsonl OR a user-provided localization package;
    - the target package id and an ADB-visible device.
    Ask me for anything missing. The synthetic repository fixture is offline-only
