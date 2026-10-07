@@ -40,8 +40,17 @@ actually required.
 ## Requirements
 
 - Node.js >= 22. The offline toolkit has no npm dependencies.
-- A compiled target story, normally `assets/www/index.html`, for any workflow
-  that inspects or builds localization data.
+- The toolkit's actual target input is the compiled game page
+  `assets/www/index.html`. In these docs this file is called the **target
+  story**. It contains the compiled SugarCube story/passages the toolkit
+  inventories and patches.
+  - If you already have an extracted game directory, point `--story` directly
+    at its `assets/www/index.html`.
+  - If you only have an APK, a coding agent may use an ordinary archive tool to
+    extract only `assets/www/index.html` into `_work/` and use that copy.
+    APK extraction is an input-preparation step, not a toolkit CLI feature.
+  - `examples/story/index.html` in this repository is synthetic test data. It
+    is only for the offline demo and cannot replace a real target story.
 - Optional on-device validation: `adb` is required for device runs.
   Google Android CLI and
   [Paisley Park](https://github.com/102326/DoL-Dev-Tools-Paisley-Park) are
@@ -109,6 +118,8 @@ node examples/run-example.mjs
 
 The repository example uses a synthetic, non-Chinese pseudo-language. It proves
 the offline pipeline only; it is not a real localization pack for DoL / DoLP.
+Its `examples/story/index.html` is also only a synthetic test story and must
+not be used as the `--story` input for a real game build.
 
 ## Coverage and build modes
 
