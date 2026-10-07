@@ -38,7 +38,17 @@ cache import <structure-cache.zip> --story <index.html> [--report <report.json>]
 selftest
 ```
 
-`--story` points at the compiled `assets/www/index.html` of the target build.
+`--story` points at the target build's compiled `assets/www/index.html`.
+This file is called the **target story** throughout the toolkit: it contains the
+compiled SugarCube story/passages that inventory, audit, export, QA, build, and
+migration use as the current-source baseline.
+
+If the user supplies an extracted game directory, use its
+`assets/www/index.html` directly. If the user only supplies an APK, extracting
+that one file with a normal archive tool into `_work/` is a valid preparation
+step; APK extraction itself is not a toolkit CLI feature. The in-repository
+`examples/story/index.html` is synthetic test data only and is not a substitute
+for a real target story.
 
 ## Coverage states
 
@@ -66,7 +76,8 @@ Every unit of the current target is in exactly one state:
 
 ## Inputs and outputs
 
-* **Story**: a compiled `index.html`. Never modified.
+* **Story**: the compiled target `assets/www/index.html` used as the source
+  baseline. Never modified.
 * **Localization source** (optional, hand-edited): JSON/JSONL of
   `{ passage, from, to }` entries.
 * **Localization state** (`state.jsonl`): the user's imported translations +
