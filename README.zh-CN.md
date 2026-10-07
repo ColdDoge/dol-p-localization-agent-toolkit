@@ -35,8 +35,17 @@
 ## 运行要求
 
 - Node.js >= 22。离线工具本身没有 npm 依赖。
-- 任何需要分析或构建汉化的流程，都需要目标版本编译后的 story，通常是
-  `assets/www/index.html`。
+- toolkit 真正读取的目标文件是游戏编译后的
+  `assets/www/index.html`。本文档把这个文件简称为 **目标 story**。
+  它里面包含已经编译进 SugarCube 的 story / passage，也是 inventory、
+  导出、QA、构建和迁移时用来判断“当前游戏版本内容”的基准。
+  - 如果你已经有解包后的游戏目录，直接把 `--story` 指向其中的
+    `assets/www/index.html` 即可。
+  - 如果手里只有 APK，Coding Agent 可以用普通压缩/归档工具只提取
+    `assets/www/index.html` 到 `_work/` 后再交给 toolkit。
+    这只是准备输入文件，不是 toolkit 自己提供的 APK 提取命令。
+  - 仓库中的 `examples/story/index.html` 是 synthetic 测试文件，
+    只用于离线演示，不能代替真实 DoL / DoLP 目标版本的 story。
 - 可选真机验证：真实设备运行需要 `adb`。
   Google Android CLI 和
   [Paisley Park](https://github.com/102326/DoL-Dev-Tools-Paisley-Park)
@@ -102,7 +111,8 @@ node examples/run-example.mjs
 ```
 
 仓库内示例使用的是 synthetic、非中文伪语言，只用于证明离线流水线能跑通；
-它并不是 DoL / DoLP 的真实汉化包。
+它并不是 DoL / DoLP 的真实汉化包。其中的 `examples/story/index.html`
+也只是测试用 story，真实汉化时不能把它当作 `--story` 输入。
 
 ## 覆盖率与构建模式
 
