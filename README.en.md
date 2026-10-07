@@ -110,6 +110,35 @@ node core/src/run.mjs build \
   --mode strict
 ```
 
+### Large localizations
+
+A real target can exceed 100,000 segments. Two conveniences keep large manual
+translation practical without changing any check:
+
+```bash
+# One-shot chunked export: several independent kits + index.json in one run.
+node core/src/run.mjs kit export \
+  --story <target>/assets/www/index.html \
+  --scope all \
+  --chunk-size 5000 \
+  --output-dir _work/kits
+
+# Import always scans the whole kit; collect every problem into a repair kit.
+node core/src/run.mjs kit import _work/kit-filled.zip \
+  --story <target>/assets/www/index.html \
+  --out _work/state.jsonl \
+  --require-complete \
+  --report _work/import-report.json \
+  --repair-output _work/repair-kit.zip
+```
+
+Chunked export is opt-in: without `--chunk-size` the export stays a single
+`--output <kit.zip>`. A repair kit carries only the rejected / deferred /
+conflict units plus an `issues.jsonl`; fix it and re-import it into the same
+`state.jsonl`. Neither mode weakens placeholder, reversible, V3 structural,
+planner or replay checks, and `--require-complete` still fails while blockers
+remain.
+
 For a no-game, no-translation demonstration:
 
 ```bash

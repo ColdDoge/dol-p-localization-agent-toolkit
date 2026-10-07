@@ -38,6 +38,9 @@ export const KIT_FILES = {
   segmentsJsonl: 'segments.jsonl',
   segmentsCsv: 'segments.csv',
   glossaryCsv: 'glossary.csv',
+  // Optional sidecar. Only a repair kit writes it; a normal kit and every
+  // importer ignore it. It explains per-unit what an import could not accept.
+  issues: 'issues.jsonl',
 };
 
 export const SEGMENT_CSV_COLUMNS = [
@@ -179,6 +182,31 @@ export function serializeGlossaryCsv(glossary) {
   return `\uFEFF${rows.join('\r\n')}\r\n`;
 }
 
+/** `issues.jsonl` — one machine-readable problem record per repair unit. */
+export function serializeIssuesJsonl(issues) {
+  const list = issues || [];
+  return list.map((i) => JSON.stringify(i)).join('\n') + (list.length ? '\n' : '');
+}
+
+/** Parse a `glossary.csv` payload (columns `from,to,note`, RFC4180 quoting). */
+export function parseGlossaryCsv(text) {
+  const rows = parseCsv(text);
+  if (!rows.length) return [];
+  const header = rows[0].map((h) => String(h).trim());
+  const idx = (name) => header.indexOf(name);
+  const out = [];
+  for (let i = 1; i < rows.length; i += 1) {
+    const cells = rows[i];
+    if (cells.length === 1 && cells[0].trim() === '') continue;
+    out.push({
+      from: cells[idx('from')] || '',
+      to: cells[idx('to')] || '',
+      note: cells[idx('note')] || '',
+    });
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Parsing (import side)
 // ---------------------------------------------------------------------------
@@ -254,7 +282,15 @@ export function mergeSegmentTranslations({ jsonl = [], csv = [] }) {
     const e = byId.get(id);
     const j = (e.jsonl || '').trim();
     const c = (e.csv || '').trim();
-    if (j && c && j !== c) { conflicts.push({ unitId: id, reason: 'jsonl-csv-conflict' }); continue; }
+    if (j && c && j !== c) {
+      conflicts.push({
+        unitId: id,
+        reason: 'jsonl-csv-conflict',
+        jsonlTranslation: e.jsonl == null ? '' : String(e.jsonl),
+        csvTranslation: e.csv == null ? '' : String(e.csv),
+      });
+      continue;
+    }
     units.push({ unitId: id, translation: j || c || '', source: j ? 'jsonl' : (c ? 'csv' : 'none'), jsonlSeg: e.jsonlSeg, csvRow: e.csvRow });
   }
   return { units, conflicts };
@@ -268,16 +304,24 @@ function dirnameOf(p) {
   return path.dirname(path.resolve(p));
 }
 
-/** Write a kit to a store-only zip. */
-export function exportKitZip(kit, zipPath) {
-  const buf = createZip([
+/**
+ * Write a kit to a store-only zip.
+ *
+ * `readme` / `rules` override the generated human text; `issues` adds the
+ * optional `issues.jsonl` sidecar (a repair kit uses both). Everything else
+ * keeps the exact v1 localization-kit layout.
+ */
+export function exportKitZip(kit, zipPath, { readme = null, rules = null, issues = null } = {}) {
+  const entries = [
     { name: KIT_FILES.manifest, data: `${JSON.stringify(kit.manifest, null, 2)}\n` },
-    { name: KIT_FILES.readme, data: readmeText(kit) },
-    { name: KIT_FILES.rules, data: rulesText(kit) },
+    { name: KIT_FILES.readme, data: readme != null ? readme : readmeText(kit) },
+    { name: KIT_FILES.rules, data: rules != null ? rules : rulesText(kit) },
     { name: KIT_FILES.segmentsJsonl, data: serializeSegmentsJsonl(kit.segments) },
     { name: KIT_FILES.segmentsCsv, data: serializeSegmentsCsv(kit.segments) },
     { name: KIT_FILES.glossaryCsv, data: serializeGlossaryCsv(kit.glossary) },
-  ]);
+  ];
+  if (issues && issues.length) entries.push({ name: KIT_FILES.issues, data: serializeIssuesJsonl(issues) });
+  const buf = createZip(entries);
   fs.mkdirSync(dirnameOf(zipPath), { recursive: true });
   fs.writeFileSync(zipPath, buf);
   return { bytes: buf.length, sha256: crypto.createHash('sha256').update(buf).digest('hex'), segments: kit.segments.length };
@@ -316,6 +360,7 @@ export function importKitZip(zipPath) {
       readme: tryRead(buf, KIT_FILES.readme),
       rules: tryRead(buf, KIT_FILES.rules),
       glossaryCsv: tryRead(buf, KIT_FILES.glossaryCsv),
+      issuesJsonl: tryRead(buf, KIT_FILES.issues),
     },
   };
 }
@@ -382,4 +427,64 @@ export function rulesText(kit) {
   }
   lines.push('');
   return lines.join('\n');
+}
+
+/**
+ * README for a repair kit: a small, secondary kit that carries only the
+ * entries a previous import could not accept (rejected / deferred / JSONL-CSV
+ * conflict). It re-uses the localization-kit layout so the user fills
+ * `translation` and hands the same archive back to `kit import`.
+ */
+export function repairReadmeText(kit, issues = []) {
+  const m = kit.manifest;
+  const counts = {};
+  for (const i of issues) counts[i.status] = (counts[i.status] || 0) + 1;
+  const summary = Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(', ') || 'none';
+  return [
+    '# Localization repair kit',
+    '',
+    'This is a **repair kit**. It carries only the entries from your last import',
+    'that could not be accepted: rejected, deferred, or JSONL/CSV conflicts.',
+    'Everything that was already accepted has been written to your localization',
+    'state and is deliberately **not** repeated here, so you only fix the small',
+    'remainder.',
+    '',
+    '## What to do',
+    '1. Read `issues.jsonl`. It explains, per unit, what was wrong:',
+    '   `{ "unitId", "status", "reason", "codes": [...] }`, plus the two',
+    '   conflicting values for a `conflict`.',
+    '2. Fix each entry by editing **only** the `translation` field in',
+    '   `segments.jsonl` (or `segments.csv`).',
+    '3. Hand this archive straight back to the importer:',
+    '',
+    '   node core/src/run.mjs kit import <repair-kit.zip> --story <index.html> --out <state.jsonl>',
+    '',
+    '   The fixes merge into the same `state.jsonl`; you do **not** re-import the',
+    '   original kit.',
+    '',
+    '## Rules',
+    '- Edit **only** `translation`. Do not change `unitId`, `protectedSource`,',
+    '  `rawSourceHash`, `protectedHash`, `sourceFingerprint`,',
+    '  `structuralFingerprint`, `placeholders`, or any `context*` field.',
+    '- Keep placeholders (`\u27e6n\u27e7`), macros, variables, HTML tags and link',
+    '  targets exactly as they appear in `protectedSource`.',
+    '- `issues.jsonl` is a read-only explanation; editing it fixes nothing.',
+    '- An entry whose `translation` stays empty is reported as `deferred`',
+    '  (`--require-complete` treats that as a failure).',
+    '',
+    '## Identity',
+    `- Target story sha256: ${m.targetStory.sha256}`,
+    `- Source version: ${m.sourceVersion}`,
+    `- Target language: ${m.targetLanguage}`,
+    `- Scope: ${m.scope}`,
+    `- Units in this repair kit: ${m.exportedCount}`,
+    `- Issues in this repair kit: ${summary}`,
+    '',
+    '## Why a conflict has an empty translation',
+    'When `segments.jsonl` and `segments.csv` disagreed for the same unit, this',
+    'repair kit leaves `translation` empty in **both** so it cannot conflict',
+    'again on re-import. The two original values are recorded in `issues.jsonl`',
+    'as `jsonlTranslation` and `csvTranslation`; pick one or write a new one.',
+    '',
+  ].join('\n');
 }

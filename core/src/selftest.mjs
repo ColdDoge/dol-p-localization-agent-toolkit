@@ -20,8 +20,9 @@ import { buildEntries, qaEntries } from './lib/entries.mjs';
 import { buildPack } from './lib/builder.mjs';
 import { sourceFingerprint, structuralKey, protectedHash, buildStructureCache, exportStructureCache, importStructureCache, structureCacheCompatible } from './lib/structure-cache.mjs';
 import { classifyCoverage, markUnresolved, strictPass, blockingTotal } from './lib/coverage.mjs';
-import { runKitExport, writeKit, runKitImport } from './lib/kit-run.mjs';
-import { loadState } from './lib/localization-state.mjs';
+import { runKitExport, writeKit, runKitImport, runKitExportChunked, writeChunkedKitExport, buildRepairKit, writeRepairKit } from './lib/kit-run.mjs';
+import { importKitZip } from './lib/kit.mjs';
+import { loadState, mergeRecords } from './lib/localization-state.mjs';
 
 let passed = 0;
 let failed = 0;
@@ -161,6 +162,83 @@ function testStructureCache(dir, story) {
   ok('structure cache has no translation layer', !JSON.stringify(back.structure).includes('translation'));
 }
 
+function testChunkedExport(dir, story, byName, units, byUnitId) {
+  const chunkSize = 2;
+  const generatedAt = '2026-01-01T00:00:00.000Z';
+  const { chunks, totalSegments, inventoryFingerprint } = runKitExportChunked({
+    story, byName, units, scope: 'all', chunkSize, sourceVersion: 'test', generatedAt,
+  });
+  ok('chunk: covers the whole candidate set', totalSegments === units.length, `${totalSegments} vs ${units.length}`);
+  ok('chunk: no chunk exceeds chunk-size', chunks.every((c) => c.segments.length <= chunkSize));
+  ok('chunk: no empty trailing chunk', chunks.length === 0 || chunks[chunks.length - 1].segments.length > 0);
+  const ids = chunks.flatMap((c) => c.segments.map((s) => s.unitId));
+  ok('chunk: every unit appears exactly once', ids.length === units.length && new Set(ids).size === ids.length);
+  ok('chunk: order matches the stable inventory order', ids.join(',') === units.map((u) => u.unitId).join(','));
+
+  const outDir = path.join(dir, 'kits');
+  const written = writeChunkedKitExport({
+    chunks, outputDir: outDir, scope: 'all', story, chunkSize, inventoryFingerprint, generatedAt,
+  });
+  ok('chunk: index chunkCount matches', written.index.chunkCount === chunks.length, `${written.index.chunkCount} vs ${chunks.length}`);
+  ok('chunk: index totalSegments matches', written.index.totalSegments === units.length);
+
+  let accepted = 0;
+  for (let i = 0; i < chunks.length; i += 1) {
+    const filename = `localization-kit-${String(i + 1).padStart(3, '0')}.zip`;
+    const kit = importKitZip(path.join(outDir, filename));
+    ok(`chunk ${i + 1}: own exportedCount`, kit.manifest.exportedCount === chunks[i].segments.length);
+    const filled = kit.jsonl.map((s) => ({ ...s, translation: pseudoProtected(s.protectedSource) }));
+    const filledZip = path.join(dir, `chunk-filled-${i}.zip`);
+    writeKit({ manifest: kit.manifest, segments: filled, glossary: [] }, filledZip);
+    const imp = runKitImport({ story, byUnitId, kitZipPath: filledZip, requireComplete: true });
+    ok(`chunk ${i + 1}: independently importable`, imp.ok, JSON.stringify({ rejected: imp.rejected, deferred: imp.deferred, conflicts: imp.conflicts }));
+    accepted += imp.accepted.length;
+  }
+  ok('chunk: all units accepted across chunks', accepted === units.length, `${accepted} vs ${units.length}`);
+}
+
+function testRepairKit(dir, story, byName, units, byUnitId) {
+  const exported = runKitExport({ story, byName, units, byUnitId, records: new Map(), scope: 'all', sourceVersion: 'test' });
+  const badUnit = units.find((u) => (u.placeholders || []).length > 0) || units[0];
+  const deferredUnit = units.find((u) => u.unitId !== badUnit.unitId);
+  const broken = 'Broken <b>tag</b> here.';
+  const segments = exported.segments.map((s) => {
+    if (s.unitId === badUnit.unitId) return { ...s, translation: broken };
+    if (s.unitId === deferredUnit.unitId) return { ...s, translation: '' };
+    return { ...s, translation: pseudoProtected(s.protectedSource) };
+  });
+  const srcZip = path.join(dir, 'repair-src.zip');
+  writeKit({ manifest: exported.kit.manifest, segments, glossary: [] }, srcZip);
+
+  const imp = runKitImport({ story, byUnitId, kitZipPath: srcZip, requireComplete: true });
+  ok('repair: require-complete stays a hard failure', !imp.ok);
+  ok('repair: full scan accepted every valid entry', imp.accepted.length === units.length - 2, `${imp.accepted.length} vs ${units.length - 2}`);
+  ok('repair: rejected + deferred collected as blockers', imp.blockerTotal === 2, JSON.stringify(imp.blockers));
+
+  const repair = buildRepairKit({ story, byName, byUnitId, sourceManifest: imp.manifest, blockers: imp.blockers });
+  ok('repair: only blockers are carried', repair.segments.length === 2, `${repair.segments.length}`);
+  ok('repair: rejected translation preserved', repair.segments.find((s) => s.unitId === badUnit.unitId).translation === broken);
+  ok('repair: deferred translation stays empty', repair.segments.find((s) => s.unitId === deferredUnit.unitId).translation === '');
+  ok('repair: issues 1:1 with blockers', repair.issues.length === 2);
+
+  const repairZip = path.join(dir, 'repair-kit.zip');
+  writeRepairKit(repair, repairZip);
+  const rk = importKitZip(repairZip);
+  ok('repair: repair kit keeps the target identity', rk.manifest.targetStory.sha256 === story.sha256);
+  ok('repair: repair kit carries issues.jsonl', typeof rk.files.issuesJsonl === 'string' && rk.files.issuesJsonl.trim().length > 0);
+
+  const fixed = rk.jsonl.map((s) => ({ ...s, translation: pseudoProtected(s.protectedSource) }));
+  const fixedZip = path.join(dir, 'repair-fixed.zip');
+  writeKit({ manifest: rk.manifest, segments: fixed, glossary: [] }, fixedZip);
+  const imp2 = runKitImport({ story, byUnitId, kitZipPath: fixedZip, requireComplete: true });
+  ok('repair: fixed repair kit imports clean', imp2.ok, JSON.stringify({ rejected: imp2.rejected, deferred: imp2.deferred, conflicts: imp2.conflicts }));
+  const merged = mergeRecords(new Map(imp.records.map((r) => [r.unitId, r])), imp2.records);
+  ok('repair: fixed records merge into the same state', merged.size === units.length, `${merged.size} vs ${units.length}`);
+
+  const imp3 = runKitImport({ story, byUnitId, kitZipPath: repairZip, requireComplete: true });
+  ok('repair: an unfixed repair kit is still rejected (guard intact)', !imp3.ok && imp3.rejected.length >= 1);
+}
+
 function testCoverageStates(units, story) {
   const all = makeStateForAll(units, story);
   const full = classifyCoverage({ units, records: all });
@@ -251,6 +329,8 @@ export function runSelftest() {
   testPlannerGate();
   testStructureCache(dir, story);
   testCoverageStates(units, story);
+  testChunkedExport(dir, story, byName, units, byUnitId);
+  testRepairKit(dir, story, byName, units, byUnitId);
   testE2E(dir, story, byName, units, byUnitId);
 
   process.stdout.write(`\nselftest: ${passed} passed, ${failed} failed\n`);

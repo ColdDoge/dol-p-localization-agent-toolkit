@@ -104,6 +104,34 @@ node core/src/run.mjs build \
   --mode strict
 ```
 
+### 大规模汉化
+
+真实目标可能超过 100,000 个 segment。下面两个便利功能让大规模人工翻译更可行，
+同时完全不改变任何检查：
+
+```bash
+# 一次性分片导出：一次运行产出多个相互独立的 kit 和 index.json。
+node core/src/run.mjs kit export \
+  --story <target>/assets/www/index.html \
+  --scope all \
+  --chunk-size 5000 \
+  --output-dir _work/kits
+
+# import 始终完整扫描整个 kit，并把所有问题集中成一个 repair kit。
+node core/src/run.mjs kit import _work/kit-filled.zip \
+  --story <target>/assets/www/index.html \
+  --out _work/state.jsonl \
+  --require-complete \
+  --report _work/import-report.json \
+  --repair-output _work/repair-kit.zip
+```
+
+分片导出是可选项：不传 `--chunk-size` 时，导出行为与之前完全一致（单个
+`--output <kit.zip>`）。repair kit 只包含 rejected / deferred / conflict 的单元，
+并附带 `issues.jsonl`；修好后直接把这一小包重新 import 到同一个 `state.jsonl`。
+两种模式都不会削弱 placeholder、reversible、V3 结构、planner 或 replay 检查，
+`--require-complete` 在仍有 blocker 时依然失败。
+
 如果只想在没有真实游戏和译文的情况下跑通演示：
 
 ```bash

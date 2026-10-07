@@ -33,11 +33,27 @@ examples are the contract; this document is guidance, never a hidden dependency.
    node core/src/run.mjs kit export --story <index.html> --output _work/kit.zip --scope missing --state _work/state.jsonl
    ```
 
+   For a large target, split the whole scope in one run instead:
+
+   ```bash
+   node core/src/run.mjs kit export --story <index.html> --scope all \
+     --chunk-size 5000 --output-dir _work/kits
+   ```
+
+   This writes several independent kits plus `index.json`; each chunk imports on
+   its own into the same `state.jsonl`.
+
 4. **Import** the filled kit. Import re-verifies every entry:
 
    ```bash
-   node core/src/run.mjs kit import _work/kit-filled.zip --story <index.html> --out _work/state.jsonl --require-complete
+   node core/src/run.mjs kit import _work/kit-filled.zip --story <index.html> \
+     --out _work/state.jsonl --require-complete --repair-output _work/repair-kit.zip
    ```
+
+   Import scans the entire kit. Accepted entries are written; rejected, deferred
+   and JSONL/CSV conflicts are collected into the repair kit (see
+   `docs/LOCALIZATION-KIT.md`). Fix the repair kit and re-import it into the same
+   `state.jsonl`; `--require-complete` still fails while any blocker remains.
 
 5. **QA**, then **build**:
 

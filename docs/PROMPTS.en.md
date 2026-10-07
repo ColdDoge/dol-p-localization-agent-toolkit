@@ -58,6 +58,9 @@ Work safely and treat the public repository as the contract.
 6. Inventory the target and export the complete localization kit with scope=all.
    If I supplied a glossary, include it. If I did not, continue without one.
    Do not generate, rewrite, or invent translations.
+   For a large target (tens of thousands of segments), export it in one shot with
+   --chunk-size <n> --output-dir <dir> so I get several independent kits plus an
+   index.json, instead of an export-a-batch / upload / export-the-next loop.
 
 7. If I have NOT supplied a filled localization kit, stop at the safe hand-off
    point and report:
@@ -124,6 +127,8 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
    - scope=missing for untranslated units;
    - scope=changed for superseded units.
    Do not generate translations yourself.
+   On a large target you may export the whole scope in one shot with
+   --chunk-size <n> --output-dir <dir> rather than one oversized kit.
 
 7. If there are structural rejections or unresolved planner items, report their
    concrete reasons instead of hiding them behind a total count.
@@ -229,6 +234,10 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
 
 5. Run QA and write a report. Surface structural-protection findings and
    planner/replay problems explicitly.
+   When a kit import reports rejected / deferred / conflict entries, scan the
+   ENTIRE kit (never stop at the first failure), pass --repair-output to collect
+   only those units into a small repair kit, and report the problem counts and
+   the repair-kit path. Do not ask me to redo the whole original kit.
 
 6. Attempt a strict build.
    - If strict succeeds, report the pack path, entry count, coverage, and QA

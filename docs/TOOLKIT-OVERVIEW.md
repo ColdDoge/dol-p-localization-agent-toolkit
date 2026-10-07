@@ -28,7 +28,11 @@ audit       --story <index.html> [--state <state.jsonl>] [--localization <src>] 
 kit export  --story <index.html> --output <kit.zip> [--scope all|untranslated|missing|changed]
             [--state <state.jsonl>] [--localization <src>] [--glossary <glossary.csv>]
             [--limit N] [--target-language <tag>] [--source-version <v>]
-kit import  <kit.zip> --story <index.html> --out <state.jsonl> [--require-complete] [--report <report.json>]
+kit export  --story <index.html> --output-dir <dir> --chunk-size <n>
+            [--scope ...] [--state <state.jsonl>] [--glossary <glossary.csv>] [--limit N]
+            (one-shot chunked export: several independent kits + index.json)
+kit import  <kit.zip> --story <index.html> --out <state.jsonl> [--require-complete]
+            [--report <report.json>] [--repair-output <repair-kit.zip>]
 build       --story <index.html> --state <state.jsonl> --output <pack.mod.zip>
             [--mode strict|partial] [--report <report.json>] [--name <n>] [--pack-version <v>]
 qa          --story <index.html> --state <state.jsonl> [--report <report.json>]
@@ -42,6 +46,24 @@ selftest
 This file is called the **target story** throughout the toolkit: it contains the
 compiled SugarCube story/passages that inventory, audit, export, QA, build, and
 migration use as the current-source baseline.
+
+## Large localizations
+
+Two export / import conveniences target real, large translations (a target can
+exceed 100,000 segments) without changing the checks:
+
+* **One-shot chunked export** — `kit export --chunk-size <n> --output-dir <dir>`
+  splits the whole current scope into several independent kits (plus
+  `index.json`) in one run, so a translator can work through batches without an
+  "export a batch → upload → export the next batch" loop.
+* **Repair kit** — `kit import ... --repair-output <repair-kit.zip>` always scans
+  the entire kit, keeps accepted entries, and collects every rejected / deferred
+  / JSONL-CSV conflict into a small repair kit (`issues.jsonl` included) that is
+  filled and re-imported into the same `state.jsonl`.
+
+Neither changes coverage semantics, the strict / `--require-complete` failure
+rules, or the structural guards. `missing` / `changed` / `unresolved` keep their
+existing meanings and are not folded into the repair kit.
 
 If the user supplies an extracted game directory, use its
 `assets/www/index.html` directly. If the user only supplies an APK, extracting

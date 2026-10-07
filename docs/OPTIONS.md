@@ -22,7 +22,16 @@ Flags accepted by the CLI, grouped by command.
 
 ## kit export
 
-* `--output <kit.zip>` — required.
+* `--output <kit.zip>` — write one kit. Required unless chunk mode is used.
+* `--output-dir <dir>` + `--chunk-size <n>` — **one-shot chunked export**. Apply
+  the scope and `--limit` to the whole candidate set once, split it into
+  `n`-segment chunks in the stable inventory order, and write one independent
+  localization kit per chunk plus an `index.json` into `<dir>`
+  (`localization-kit-001.zip`, `localization-kit-002.zip`, ...). Every chunk is
+  a full, valid kit that shares the same target story, source version, language,
+  glossary and inventory fingerprint; only `exportedCount` differs. The last
+  chunk may be short. `--output` and `--output-dir` are mutually exclusive, and
+  each of `--chunk-size` / `--output-dir` requires the other.
 * `--scope all|untranslated|missing|changed` — default `all`.
 * `--state` / `--localization` — the current localization, used by the
   non-`all` scopes.
@@ -36,6 +45,11 @@ Flags accepted by the CLI, grouped by command.
 * `--out <state.jsonl>` — where to merge accepted records.
 * `--require-complete` — fail if any entry is deferred or rejected.
 * `--report <file>`.
+* `--repair-output <repair-kit.zip>` — when the import has blockers
+  (rejected / deferred / JSONL-CSV conflict), write a small **repair kit** that
+  carries only those units, plus an `issues.jsonl` sidecar. Fix it and re-import
+  it into the same `state.jsonl`. When there are no blockers no file is written
+  and the report sets `noRepairNeeded: true` and `repairKit: null`.
 
 ## build
 

@@ -12,7 +12,10 @@
  *   node core/src/run.mjs kit export  --story <index.html> --output <kit.zip> [--scope all|untranslated|missing|changed]
  *                                     [--state <state.jsonl>] [--localization <src.json>] [--glossary <glossary.csv>]
  *                                     [--limit N] [--target-language <tag>] [--source-version <v>]
- *   node core/src/run.mjs kit import  <kit.zip> --story <index.html> --out <state.jsonl> [--require-complete] [--report <report.json>]
+ *   node core/src/run.mjs kit export  --story <index.html> --output-dir <dir> --chunk-size <n>
+ *                                     [--scope ...] [--limit N] [--glossary <glossary.csv>] (one-shot chunked export)
+ *   node core/src/run.mjs kit import  <kit.zip> --story <index.html> --out <state.jsonl>
+ *                                     [--require-complete] [--report <report.json>] [--repair-output <repair-kit.zip>]
  *   node core/src/run.mjs build       --story <index.html> --state <state.jsonl> --output <pack.mod.zip>
  *                                     [--mode strict|partial] [--report <report.json>] [--name <n>] [--pack-version <v>]
  *   node core/src/run.mjs qa          --story <index.html> --state <state.jsonl> [--report <report.json>]
@@ -32,8 +35,8 @@ import { classifyCoverage, markUnresolved, strictPass, blockingTotal, exportClas
 import { buildPack } from './lib/builder.mjs';
 import { loadState, writeState, mergeRecords, recordsFromLocalizationSource, migrateRecords } from './lib/localization-state.mjs';
 import { loadLocalizationSource, validateLocalizationSource } from './lib/localization-source.mjs';
-import { runKitExport, writeKit, runKitImport } from './lib/kit-run.mjs';
-import { parseCsv } from './lib/kit.mjs';
+import { runKitExport, runKitExportChunked, writeKit, writeChunkedKitExport, runKitImport, buildRepairKit, writeRepairKit } from './lib/kit-run.mjs';
+import { parseGlossaryCsv } from './lib/kit.mjs';
 import { buildStructureCache, exportStructureCache, importStructureCache, structureCacheCompatible } from './lib/structure-cache.mjs';
 
 const USAGE = `DoL/DoLP Localization Agent Toolkit — offline entry point
@@ -46,7 +49,12 @@ Commands:
   kit export   --story <index.html> --output <kit.zip> [--scope all|untranslated|missing|changed]
                [--state <state.jsonl>] [--localization <src>] [--glossary <glossary.csv>]
                [--limit N] [--target-language <tag>] [--source-version <v>]
-  kit import   <kit.zip> --story <index.html> --out <state.jsonl> [--require-complete] [--report <report.json>]
+  kit export   --story <index.html> --output-dir <dir> --chunk-size <n>
+               [--scope all|untranslated|missing|changed] [--state <state.jsonl>]
+               [--localization <src>] [--glossary <glossary.csv>] [--limit N]
+               (one-shot chunked export: several independent kits + index.json)
+  kit import   <kit.zip> --story <index.html> --out <state.jsonl> [--require-complete]
+               [--report <report.json>] [--repair-output <repair-kit.zip>]
   build        --story <index.html> --state <state.jsonl> --output <pack.mod.zip>
                [--mode strict|partial] [--report <report.json>] [--name <n>] [--pack-version <v>]
   qa           --story <index.html> --state <state.jsonl> [--report <report.json>]
@@ -94,21 +102,7 @@ function loadRecords(story, units, { stateFile, localizationFile }) {
 
 function readGlossary(file) {
   if (!file) return [];
-  const rows = parseCsv(fs.readFileSync(file, 'utf8'));
-  if (!rows.length) return [];
-  const header = rows[0].map((h) => String(h).trim());
-  const idx = (name) => header.indexOf(name);
-  const out = [];
-  for (let i = 1; i < rows.length; i += 1) {
-    const cells = rows[i];
-    if (cells.length === 1 && cells[0].trim() === '') continue;
-    out.push({
-      from: cells[idx('from')] || '',
-      to: cells[idx('to')] || '',
-      note: cells[idx('note')] || '',
-    });
-  }
-  return out;
+  return parseGlossaryCsv(fs.readFileSync(file, 'utf8'));
 }
 
 function cmdInventory() {
@@ -156,17 +150,45 @@ function cmdAudit() {
 function cmdKitExport() {
   const { story, byName, units, byUnitId } = prepare(arg('story'), arg('source-version'));
   const { records } = loadRecords(story, units, { stateFile: arg('state'), localizationFile: arg('localization') });
-  const output = arg('output');
-  if (!output) die('kit export needs --output <kit.zip>');
   const scope = arg('scope', 'all');
   if (!['all', 'untranslated', 'missing', 'changed'].includes(scope)) die(`unknown --scope ${scope}`);
+  const limit = Number(arg('limit', '0')) || 0;
+  const glossary = readGlossary(arg('glossary'));
+  const sourceVersion = arg('source-version') || null;
+  const targetLanguage = arg('target-language') || null;
+
+  const chunkSizeArg = arg('chunk-size');
+  const outputDir = arg('output-dir');
+  const output = arg('output');
+
+  if (chunkSizeArg !== undefined || outputDir !== undefined) {
+    // Chunked mode: explicit --output-dir + --chunk-size, no --output.
+    if (output !== undefined) die('kit export: --chunk-size uses --output-dir; do not also pass --output');
+    if (outputDir === undefined) die('kit export: --chunk-size requires --output-dir <directory>');
+    if (chunkSizeArg === undefined) die('kit export: --output-dir requires --chunk-size <n>');
+    const chunkSize = Number(chunkSizeArg);
+    if (!Number.isInteger(chunkSize) || chunkSize <= 0) {
+      die(`kit export: --chunk-size must be a positive integer (got ${chunkSizeArg})`);
+    }
+    const generatedAt = nowIso();
+    const { chunks, totalSegments, inventoryFingerprint } = runKitExportChunked({
+      story, byName, units, records, scope, limit, chunkSize,
+      sourceVersion, sourceCommit: null, targetLanguage, glossary, generatedAt,
+    });
+    const written = writeChunkedKitExport({
+      chunks, outputDir, scope, story, chunkSize,
+      sourceVersion, targetLanguage, inventoryFingerprint, generatedAt,
+    });
+    process.stdout.write(`kit export: ${totalSegments} segment(s), scope=${scope}, chunkSize=${chunkSize} -> ${written.chunkCount} kit(s) in ${rel(outputDir)}\n`);
+    for (const c of written.index.chunks) process.stdout.write(`  ${c.filename}: ${c.segmentCount} segment(s)\n`);
+    process.stdout.write(`  index: ${rel(written.indexPath)}\n`);
+    return;
+  }
+
+  if (!output) die('kit export needs --output <kit.zip> (or --chunk-size with --output-dir)');
   const { kit, exported } = runKitExport({
-    story, byName, units, byUnitId, records, scope,
-    limit: Number(arg('limit', '0')) || 0,
-    sourceVersion: arg('source-version') || null,
-    sourceCommit: null,
-    targetLanguage: arg('target-language') || null,
-    glossary: readGlossary(arg('glossary')),
+    story, byName, units, byUnitId, records, scope, limit,
+    sourceVersion, sourceCommit: null, targetLanguage, glossary,
   });
   const written = writeKit(kit, output);
   process.stdout.write(`kit export: ${exported} segment(s), scope=${scope} -> ${rel(output)} (${written.bytes} bytes)\n`);
@@ -177,14 +199,41 @@ function cmdKitImport() {
   if (!zip) die('kit import needs a <kit.zip> argument');
   const out = arg('out');
   if (!out) die('kit import needs --out <state.jsonl>');
-  const { story, units, byUnitId } = prepare(arg('story'), arg('source-version'));
-  const result = runKitImport({ story, byUnitId, kitZipPath: zip, requireComplete: flag('require-complete') });
+  const repairOutput = arg('repair-output');
+  const requireComplete = flag('require-complete');
+  const { story, byName, byUnitId } = prepare(arg('story'), arg('source-version'));
+  const result = runKitImport({ story, byUnitId, kitZipPath: zip, requireComplete });
   if (result.reason === 'target-story-mismatch') {
     die(`kit target story ${result.manifestStory} does not match current target ${result.currentStory}`);
   }
   const existing = loadState(out);
   const merged = mergeRecords(existing, result.records);
   writeState(out, merged);
+
+  // Collect every blocker (rejected + deferred + conflict) and, on request,
+  // emit a small repair kit that carries only those units.
+  const blockers = result.blockers || [];
+  const noRepairNeeded = blockers.length === 0;
+  let repairKitInfo = null;
+  if (repairOutput && noRepairNeeded) {
+    process.stdout.write('kit import: no blockers; no repair kit written\n');
+  } else if (repairOutput) {
+    const glossary = parseGlossaryCsv((result.files && result.files.glossaryCsv) || '');
+    const repair = buildRepairKit({
+      story, byName, byUnitId, sourceManifest: result.manifest || {}, blockers, glossary,
+    });
+    const written = writeRepairKit(repair, repairOutput);
+    repairKitInfo = {
+      path: rel(repairOutput),
+      bytes: written.bytes,
+      sha256: written.sha256,
+      blockerCount: blockers.length,
+      segmentCount: repair.segments.length,
+      issueCount: repair.issues.length,
+      skipped: repair.skipped,
+    };
+  }
+
   const reportFile = arg('report');
   const report = {
     generatedAt: nowIso(),
@@ -194,13 +243,17 @@ function cmdKitImport() {
     rejected: result.rejected,
     deferred: result.deferred,
     conflicts: result.conflicts,
+    blockerTotal: blockers.length,
+    noRepairNeeded,
+    repairKit: repairKitInfo,
     coverageOk: result.coverageOk,
     ok: result.ok,
     stateRecords: merged.size,
   };
   if (reportFile) writeJson(reportFile, report);
   process.stdout.write(`kit import: accepted=${report.accepted} deferred=${report.deferred.length} rejected=${report.rejected.length} conflicts=${report.conflicts.length}\n`);
-  process.stdout.write(`  state=${rel(out)} (${merged.size} record(s)); requireComplete=${flag('require-complete')} ok=${result.ok}\n`);
+  process.stdout.write(`  state=${rel(out)} (${merged.size} record(s)); requireComplete=${requireComplete} ok=${result.ok}\n`);
+  if (repairKitInfo) process.stdout.write(`  repair kit: ${repairKitInfo.segmentCount} unit(s) -> ${repairKitInfo.path}\n`);
   if (!result.ok) process.exitCode = 1;
 }
 

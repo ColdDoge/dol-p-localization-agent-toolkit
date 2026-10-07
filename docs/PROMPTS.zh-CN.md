@@ -53,6 +53,9 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
 
 6. 对目标版本做 inventory，然后以 scope=all 导出完整 localization kit。
    如果我提供了 glossary 就带上；没有就正常继续。不要生成、改写或猜测任何译文。
+   如果目标很大（几万个 segment 以上），用 --chunk-size <n> --output-dir <dir>
+   一次性分片导出：你会得到多个相互独立的 kit 和 index.json，
+   避免“翻完一批 → 上传 → 再导下一批”的循环。
 
 7. 如果我还没有提供填写完成的 localization kit，就在安全交接点停下，并告诉我：
    - 检测到的目标 story identity / 版本信息；
@@ -111,6 +114,8 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
    - scope=missing：尚未翻译的单元；
    - scope=changed：源文本已经变化、旧译文失效的单元。
    不要自行生成译文。
+   目标很大时可以用 --chunk-size <n> --output-dir <dir> 一次性分片导出，
+   不必生成一个超大 kit。
 
 7. 如果出现 rejected-structure 或 unresolved，报告具体原因，
    不要只给一个总数。
@@ -203,6 +208,9 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
 4. 所有用户数据、pack、report 都不要进入 Git 历史。
 
 5. 运行 QA 并输出 report。把结构保护问题、planner/replay 问题明确列出来。
+   如果 kit import 报出 rejected / deferred / conflict，必须完整扫描整个 kit
+   （绝不因第一条失败就停止），并用 --repair-output 把这些单元集中成一个小
+   repair kit；向我报告问题数量和 repair kit 路径，不要要求我重做整个原始 kit。
 
 6. 尝试 strict build：
    - strict 成功：报告 pack 路径、entry 数量、coverage、QA 结果；

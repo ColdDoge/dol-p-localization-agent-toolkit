@@ -57,3 +57,38 @@ export function fullState(units, story) {
   }
   return records;
 }
+
+/**
+ * A synthetic story with `count` independent one-unit passages, for chunked
+ * export / repair-kit scale tests. Every passage yields exactly one unit, in
+ * passage order, so unit counts are predictable.
+ */
+export function fixtureHtml(count) {
+  const passages = [];
+  for (let i = 1; i <= count; i += 1) {
+    passages.push(
+      `<tw-passagedata pid="${i}" name="P${i}" tags="" position="${i * 100},100">`
+      + `Sentence number ${i} tells a small story about the quiet town and its people.`
+      + '</tw-passagedata>',
+    );
+  }
+  return `<!DOCTYPE html><html><head><title>fixture-${count}</title></head><body>
+<tw-storydata name="selftest-${count}" startnode="1" creator="selftest" creator-version="1.0" format="SugarCube" format-version="2.36.1" ifid="11111111-2222-3333-4444-555555555555">
+<style role="stylesheet" id="twine-user-stylesheet" type="text/twine-css"></style>
+<script role="script" id="twine-user-script" type="text/twine-javascript"></script>
+${passages.join('\n')}
+</tw-storydata></body></html>
+`;
+}
+
+/** Same shape as makeFixture(), but with `count` passages. */
+export function makeFixtureWith(count) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'toolkit-test-'));
+  const storyPath = path.join(dir, 'index.html');
+  fs.writeFileSync(storyPath, fixtureHtml(count));
+  const story = parseStory(storyPath);
+  const { byName } = indexStory(story);
+  const inv = buildInventory(story, { sourceVersion: 'test' });
+  const byUnitId = new Map(inv.units.map((u) => [u.unitId, u]));
+  return { dir, storyPath, story, byName, units: inv.units, byUnitId };
+}
