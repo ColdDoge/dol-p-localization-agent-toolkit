@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.invalid/dol-p-localization-agent-toolkit/localization-kit.schema.json",
+  "title": "Localization kit",
+  "type": "object",
+  "required": ["manifest", "segments"],
+  "additionalProperties": false,
+  "properties": {
+    "manifest": {
+      "type": "object",
+      "required": ["schemaVersion", "kind", "targetStory", "scope", "exportedCount"],
+      "properties": {
+        "schemaVersion": { "type": "string" },
+        "kind": { "const": "dol-p-localization-kit" },
+        "generatedAt": { "type": "string" },
+        "targetStory": {
+          "type": "object",
+          "required": ["sha256"],
+          "properties": {
+            "sha256": { "type": "string" },
+            "bytes": { "type": "number" },
+            "passages": { "type": "number" },
+            "format": { "type": ["string", "null"] }
+          }
+        },
+        "sourceVersion": { "type": ["string", "null"] },
+        "sourceCommit": { "type": ["string", "null"] },
+        "inventoryFingerprint": { "type": ["string", "null"] },
+        "targetLanguage": { "type": ["string", "null"] },
+        "translationQaVersion": { "type": "string" },
+        "patchPlannerVersion": { "type": "string" },
+        "scope": { "type": "string", "enum": ["all", "untranslated", "missing", "changed"] },
+        "exportedCount": { "type": "number" }
+      }
+    },
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["unitId", "passage", "protectedSource", "protectedHash", "sourceFingerprint", "translation"],
+        "properties": {
+          "unitId": { "type": "string" },
+          "passage": { "type": "string" },
+          "kind": { "type": "string" },
+          "family": { "type": "string" },
+          "riskLevel": { "type": "string" },
+          "protectedSource": { "type": "string" },
+          "rawSourceHash": { "type": "string" },
+          "protectedHash": { "type": "string" },
+          "sourceFingerprint": { "type": "string" },
+          "structuralFingerprint": { "type": "string" },
+          "placeholders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "token": { "type": "string" },
+                "type": { "type": "string" },
+                "raw": { "type": "string" }
+              }
+            }
+          },
+          "contextBefore": { "type": "string" },
+          "contextAfter": { "type": "string" },
+          "translation": { "type": "string" }
+        }
+      }
+    },
+    "glossary": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "to"],
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  }
+}

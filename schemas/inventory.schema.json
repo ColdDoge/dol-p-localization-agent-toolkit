@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.invalid/dol-p-localization-agent-toolkit/inventory.schema.json",
+  "title": "Canonical inventory",
+  "type": "object",
+  "required": ["generatedAt", "story", "stats", "unitCount", "units"],
+  "additionalProperties": true,
+  "properties": {
+    "generatedAt": { "type": "string" },
+    "sourceVersion": { "type": ["string", "null"] },
+    "story": {
+      "type": "object",
+      "required": ["sha256", "bytes", "passages"],
+      "properties": {
+        "sha256": { "type": "string" },
+        "bytes": { "type": "number" },
+        "passages": { "type": "number" }
+      }
+    },
+    "stats": { "type": "object" },
+    "unitCount": { "type": "number" },
+    "units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["unitId", "passage", "kind", "rawText", "protectedText"],
+        "properties": {
+          "unitId": { "type": "string" },
+          "passage": { "type": "string" },
+          "kind": { "type": "string", "enum": ["passage_text", "link_label", "macro_label"] },
+          "family": { "type": "string" },
+          "riskLevel": { "type": "string" },
+          "startOffset": { "type": "number" },
+          "endOffset": { "type": "number" },
+          "rawText": { "type": "string" },
+          "protectedText": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "dol-p-localization-agent-toolkit-core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline structural core and localization workflow for the DoL/DoLP localization agent toolkit.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "selftest": "node src/selftest.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  }
+}

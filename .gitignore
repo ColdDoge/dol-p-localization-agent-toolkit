@@ -1,0 +1,20 @@
+# Local workspaces and regenerable artifacts
+_work/
+_local/
+generated/
+dist/
+
+# Localization data that must never be committed
+translations/
+production/
+*.mod.zip
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

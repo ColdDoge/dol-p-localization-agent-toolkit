@@ -1,0 +1,22 @@
+NOTICE
+======
+
+This project is a localization engineering toolkit for SugarCube/ModI18N-based
+games. It does not ship any game text or any translation of a game.
+
+Third-party projects referenced for design knowledge and optional runtime
+tooling (not vendored, not bundled, not required for offline use):
+
+* DoL-Dev-Tools-Paisley Park (https://github.com/102326/DoL-Dev-Tools-Paisley-Park)
+  MIT License. Used only as an optional external tool for on-device inspection
+  (screenshots / layout / app-data backup). Not included in this repository.
+
+* vrelnir_localization (Degrees of Lewdity community localization tooling)
+  MIT License. Referenced for localization-rule knowledge only. Not included
+  and not executed by this toolkit.
+
+* Paisley Park and adb / Android CLI / Chrome DevTools Protocol are separate
+  external tools. Each is governed by its own license and terms.
+
+Your own game source, target APK, and user-provided localization inputs are
+your responsibility and are never distributed by this repository.
