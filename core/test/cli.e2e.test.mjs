@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 
 import { makeFixture, pseudoProtected } from './helpers/fixture.mjs';
 import { runKitExport, writeKit } from '../src/lib/kit-run.mjs';
+import { importKitZip } from '../src/lib/kit.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..');
@@ -95,6 +96,28 @@ test('E2E: audit classifies missing text', () => {
   const report = JSON.parse(fs.readFileSync(reportFile, 'utf8'));
   assert.equal(report.classifications.missing, fx.units.length);
   assert.equal(report.strictPass, false);
+});
+
+test('CLI: glossary CSV preserves quoted commas', () => {
+  const fx = makeFixture();
+  const glossary = path.join(fx.dir, 'glossary.csv');
+  fs.writeFileSync(glossary, 'from,to,note\r\nshopkeeper,keeper,"Use this term, except in titles"\r\n');
+
+  const kitZip = path.join(fx.dir, 'kit-with-glossary.zip');
+  const exp = cli([
+    'kit', 'export',
+    '--story', fx.storyPath,
+    '--output', kitZip,
+    '--scope', 'all',
+    '--glossary', glossary,
+  ]);
+  assert.equal(exp.code, 0, exp.stderr);
+
+  const kit = importKitZip(kitZip);
+  assert.equal(
+    kit.files.glossaryCsv,
+    '\uFEFFfrom,to,note\r\nshopkeeper,keeper,"Use this term, except in titles"\r\n',
+  );
 });
 
 test('CLI: --help exits 0 and lists the public commands', () => {
