@@ -38,8 +38,10 @@ planning with a ReplacePatcher replay gate, and coverage accounting.
 ## Requirements
 
 * Node.js >= 22 (uses global `fetch` / `WebSocket`). No npm dependencies.
-* Optional runtime validation only: `adb`, Google Android CLI, and
-  [Paisley Park](https://github.com/102326/DoL-Dev-Tools-Paisley-Park).
+* Optional runtime validation: `adb` is required for on-device runs.
+  Google Android CLI and
+  [Paisley Park](https://github.com/102326/DoL-Dev-Tools-Paisley-Park) are
+  optional and are used only for inspection / screenshot / backup evidence.
 
 ## Quick start (offline)
 
