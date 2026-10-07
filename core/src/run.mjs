@@ -33,6 +33,7 @@ import { buildPack } from './lib/builder.mjs';
 import { loadState, writeState, mergeRecords, recordsFromLocalizationSource, migrateRecords } from './lib/localization-state.mjs';
 import { loadLocalizationSource, validateLocalizationSource } from './lib/localization-source.mjs';
 import { runKitExport, writeKit, runKitImport } from './lib/kit-run.mjs';
+import { parseCsv } from './lib/kit.mjs';
 import { buildStructureCache, exportStructureCache, importStructureCache, structureCacheCompatible } from './lib/structure-cache.mjs';
 
 const USAGE = `DoL/DoLP Localization Agent Toolkit — offline entry point
@@ -93,15 +94,19 @@ function loadRecords(story, units, { stateFile, localizationFile }) {
 
 function readGlossary(file) {
   if (!file) return [];
-  const text = fs.readFileSync(file, 'utf8');
-  const rows = text.split(/\r?\n/).filter((l) => l.trim());
+  const rows = parseCsv(fs.readFileSync(file, 'utf8'));
   if (!rows.length) return [];
-  const header = rows[0].split(',').map((h) => h.trim());
+  const header = rows[0].map((h) => String(h).trim());
   const idx = (name) => header.indexOf(name);
   const out = [];
   for (let i = 1; i < rows.length; i += 1) {
-    const cells = rows[i].split(',');
-    out.push({ from: cells[idx('from')] || '', to: cells[idx('to')] || '', note: cells[idx('note')] || '' });
+    const cells = rows[i];
+    if (cells.length === 1 && cells[0].trim() === '') continue;
+    out.push({
+      from: cells[idx('from')] || '',
+      to: cells[idx('to')] || '',
+      note: cells[idx('note')] || '',
+    });
   }
   return out;
 }
