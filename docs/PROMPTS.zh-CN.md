@@ -36,8 +36,17 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
 3. 先运行离线自测：
    node core/src/selftest.mjs
 
-4. 找到目标版本编译后的 story（通常是 assets/www/index.html）。
-   如果我没有提供，或者无法可靠确定路径，只向我索要这个准确文件/路径，不要猜。
+4. 先确定真实的目标 story。这里的“目标 story”不是单独的剧情文本文件，
+   而是目标游戏编译后的 `assets/www/index.html`。
+   - 如果我提供的是已经解包的游戏目录，就直接使用其中的
+     `assets/www/index.html`；
+   - 如果我只提供 APK，就用普通压缩/归档工具只提取
+     `assets/www/index.html` 到 `_work/`，然后把这个副本交给 toolkit；
+     为了准备输入文件不要修改或重打包 APK；
+   - 不要把仓库里的 `examples/story/index.html` 用在真实游戏上，
+     它只是 synthetic 测试数据；
+   - 如果我既没有提供 APK、解包后的游戏目录，也没有提供真实
+     `index.html`，再向我索要其中一种，不要猜。
 
 5. 用户文件和生成产物不要进入 Git 历史。优先直接使用外部输入路径，
    或放到已被 gitignore 的 _local/、_work/ 中。
@@ -82,7 +91,10 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
    docs/AGENT-WORKFLOW.md、docs/OPTIONS.md、docs/LOCALIZATION-KIT.md。
    在读取我的汉化数据之前先运行 node core/src/selftest.mjs。
 
-3. 确认当前目标 story（通常是 assets/www/index.html）以及已有汉化输入。
+3. 确认当前目标 story 和已有汉化输入。这里的“目标 story”就是当前目标版本
+   编译后的真实 `assets/www/index.html`。如果我提供的是 APK 而不是解包目录，
+   就用普通压缩/归档工具只提取这个文件到 `_work/`。
+   不要用仓库里的 `examples/story/index.html` 代替真实目标，它只是测试数据。
 
    audit 支持公开文档中明确写出的格式，优先包括 state.jsonl，或者
    localization source JSON/JSONL / ModI18N TypeB fragment。
@@ -132,8 +144,10 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
    docs/AGENT-WORKFLOW.md、docs/OPTIONS.md，并先跑离线 selftest。
 
 3. 这条工作流需要我提供：
-   - 新版本编译后的目标 story（通常是 assets/www/index.html）；
+   - 新目标版本：可以直接提供真实的 `assets/www/index.html`，也可以提供
+     含有它的解包游戏目录，或者提供 APK 后只把这个文件提取到 `_work/`；
    - 旧版本由 toolkit 生成的 localization state.jsonl。
+   这里的目标 story 特指这个编译后的 `index.html`，不是仓库里的 synthetic 示例。
    如果缺少任意一项，只向我索要缺失文件并停下。
    不要从不受支持的输入里自行伪造 state 文件。
 
@@ -179,9 +193,12 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
    docs/PROTECTION-RULES.md、docs/OPTIONS.md，然后运行：
    node core/src/selftest.mjs
 
-3. 确认目标编译后的 story 和我的 localization state.jsonl。
+3. 确认真实目标 story 和我的 localization state.jsonl。
+   目标 story 指目标版本编译后的 `assets/www/index.html`。如果我提供的是 APK，
+   就用普通压缩/归档工具只提取这个文件到 `_work/`；
+   真实构建绝不能使用仓库里的 `examples/story/index.html`。
    如果我提供的是填好的 localization kit，就先按文档 import 成 state。
-   如果两者都没有，只向我索要准确缺失的输入，不要猜。
+   如果仍缺少必要输入，只向我索要准确缺失的内容，不要猜。
 
 4. 所有用户数据、pack、report 都不要进入 Git 历史。
 
@@ -226,7 +243,9 @@ https://github.com/ColdDoge/dol-p-localization-agent-toolkit
    node --test runtime/android/test/*.test.mjs
 
 3. 一次真实 smoke 需要：
-   - 真实 target story；
+   - 真实 target story，也就是目标版本编译后的
+     `assets/www/index.html`；如果手里只有 APK，就只把这个文件提取到
+     `_work/` 后使用；
    - toolkit state.jsonl 或用户提供的 localization package；
    - 目标 package id 和 ADB 能看到的设备。
    缺少任何一项就向我索要。仓库内 synthetic fixture 只能离线使用，
