@@ -56,7 +56,7 @@ function pseudoProtected(protectedSource) {
 }
 
 function makeWorkdir() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dolp-toolkit-selftest-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'toolkit-selftest-'));
   fs.writeFileSync(path.join(dir, 'index.html'), FIXTURE_HTML);
   return dir;
 }

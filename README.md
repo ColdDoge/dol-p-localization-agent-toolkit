@@ -38,6 +38,27 @@ node core/src/run.mjs build --story examples/story/index.html --state _work/stat
 Everything above is offline. No ADB, Android SDK, Paisley Park, or device is
 touched unless you explicitly run a `runtime` command.
 
+### Optional runtime validation
+
+```bash
+node runtime/localization_smoke_build.mjs --story examples/story/index.html --state _work/state.jsonl
+node runtime/android/doctor.mjs
+node runtime/android/test-localization-runtime.mjs --level smoke
+```
+
+See [docs/RUNTIME-VALIDATION.md](docs/RUNTIME-VALIDATION.md). This requires a
+device and your explicit go-ahead for each run; the offline workflow never needs
+it.
+
+### Tests
+
+```bash
+node core/src/selftest.mjs
+node --test core/test/*.test.mjs
+node --test runtime/android/test/*.test.mjs
+node examples/run-example.mjs
+```
+
 ## Coverage and build modes
 
 The toolkit classifies every unit of the current target into exactly one state:

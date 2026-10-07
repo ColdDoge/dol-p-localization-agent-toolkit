@@ -9,6 +9,7 @@
   },
   "scripts": {
     "selftest": "node src/selftest.mjs",
-    "test": "node --test \"test/*.test.mjs\""
+    "test": "node --test \"test/*.test.mjs\"",
+    "test:runtime": "node --test \"../runtime/android/test/*.test.mjs\""
   }
 }

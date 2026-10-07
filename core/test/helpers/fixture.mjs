@@ -29,7 +29,7 @@ export function pseudoProtected(protectedSource) {
 }
 
 export function makeFixture() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dolp-toolkit-test-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'toolkit-test-'));
   const storyPath = path.join(dir, 'index.html');
   fs.writeFileSync(storyPath, FIXTURE_HTML);
   const story = parseStory(storyPath);

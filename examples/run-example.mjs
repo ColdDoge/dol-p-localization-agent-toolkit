@@ -18,6 +18,8 @@ import { runKitExport, writeKit, runKitImport } from '../core/src/lib/kit-run.mj
 import { writeState } from '../core/src/lib/localization-state.mjs';
 import { classifyCoverage, markUnresolved, strictPass } from '../core/src/lib/coverage.mjs';
 import { buildPack } from '../core/src/lib/builder.mjs';
+import { validateLocalizationSource } from '../core/src/lib/localization-source.mjs';
+import { recordsFromLocalizationSource } from '../core/src/lib/localization-state.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const STORY = path.join(HERE, 'story', 'index.html');
@@ -34,6 +36,17 @@ const byUnitId = new Map(inv.units.map((u) => [u.unitId, u]));
 fs.mkdirSync(OUT, { recursive: true });
 
 console.log(`inventory: ${inv.units.length} units`);
+
+// 0) demonstrate auditing a hand-written localization source
+const sourceEntries = inv.units.map((u) => ({
+  passage: u.passage,
+  from: u.rawText,
+  to: (u.protectedText ? restoreProtected(pseudo(u.protectedText), u.placeholders) : pseudo(u.rawText)),
+}));
+const validated = validateLocalizationSource([{ file: 'example-source', entries: sourceEntries }], story);
+const fromSource = recordsFromLocalizationSource({ resolved: validated.resolved, units: inv.units, story });
+const audit = classifyCoverage({ units: inv.units, records: new Map(fromSource.records.map((r) => [r.unitId, r])) });
+console.log(`audit(existing localization): ${JSON.stringify(audit.counts)}`);
 
 // 1) export the full kit
 const exported = runKitExport({ story, byName, units: inv.units, byUnitId, records: new Map(), scope: 'all', sourceVersion: 'example-1.0', targetLanguage: 'xx-pseudo' });

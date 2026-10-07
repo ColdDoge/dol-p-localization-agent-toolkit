@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "localization-smoke-scenarios",
+  "scenarios": [
+    {
+      "id": "a1-start",
+      "tier": "A",
+      "label": "Start passage renders target text",
+      "passage": "Start",
+      "expectTargetAny": ["Welcomex tox thex quietx testx townx"],
+      "forbidSourceAny": ["Welcome to the quiet test town"],
+      "require": [".passage"]
+    },
+    {
+      "id": "a2-hallway",
+      "tier": "A",
+      "label": "Hallway passage renders target text",
+      "passage": "Hallway",
+      "expectTargetAny": ["Thex hallwayx isx quietx"],
+      "forbidSourceAny": ["The hallway is quiet"],
+      "require": [".passage"]
+    },
+    {
+      "id": "c1-shop",
+      "tier": "C",
+      "label": "Shop passage still renders (no target-text assertion)",
+      "passage": "Shop",
+      "require": [".passage"]
+    }
+  ],
+  "levels": {
+    "smoke": ["a1-start", "c1-shop"],
+    "regression": ["a1-start", "a2-hallway", "c1-shop"],
+    "exhaustive": ["a1-start", "a2-hallway", "c1-shop"]
+  }
+}
