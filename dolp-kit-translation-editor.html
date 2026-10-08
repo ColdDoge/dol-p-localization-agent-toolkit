@@ -77,6 +77,11 @@
     .note-bad { color:var(--warn); font-weight:680; }
     .pager { margin:23px 0 0; display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:10px; }
     .pager span { color:var(--soft); min-width:102px; text-align:center; font-variant-numeric:tabular-nums; font-size:14px; }
+    .pager .pagenums{display:flex;gap:5px;flex-wrap:wrap;justify-content:center;}
+    .pager .pnum{min-width:38px;padding:7px 9px;min-height:34px;border-radius:9px;font-variant-numeric:tabular-nums;}
+    .pager .pnum.current{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:750;}
+    .pager .jump{display:flex;gap:6px;align-items:center;}
+    .pager .jump input{width:74px;border:1px solid var(--line);border-radius:9px;background:var(--field);color:var(--ink);padding:7px 9px;text-align:center;}
     .page-empty { text-align:center; background:var(--panel); padding:30px; color:var(--soft); border-radius:12px; }
     .footnotes { font-size:12px; color:var(--soft); margin:22px 0 12px; line-height:1.8; }
     .toast { position:fixed; left:50%; transform:translateX(-50%) translateY(20px); bottom:28px; z-index:20; background:#233e4c; color:white; padding:13px 18px; border-radius:11px; font-size:13px; box-shadow:0 10px 32px #10293433; max-width:min(580px,90vw); opacity:0; pointer-events:none; transition:.23s; }
@@ -267,8 +272,9 @@
         </select>
         <button class="btn tiny" type="button" id="batchMarkBtn" data-i18n="markBatch">标记当前结果</button>
       </div>
+      <nav class="pager" id="pagerTop" aria-label="分页" data-i18n-aria="pagerLabel"></nav>
       <div class="list" id="list"></div>
-      <nav class="pager" aria-label="分页"><button class="btn" id="prev" type="button" data-i18n="prevPage">上一页</button><span id="pageText"></span><button class="btn" id="next" type="button" data-i18n="nextPage">下一页</button></nav>
+      <nav class="pager" id="pagerBottom" aria-label="分页" data-i18n-aria="pagerLabel"></nav>
       <div class="footnotes" data-i18n="footnotes">占位符 ⟦0⟧ 等请保持原样，最终检查由 Toolkit 完成。草稿与词典保存在浏览器中；请定期导出 ZIP 和词典 JSON 备份。建议使用 Chrome / Edge。</div>
     </section>
     <input type="file" id="file" accept=".zip,application/zip" class="hidden">
@@ -578,12 +584,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       for (const e of olds) {
         byId.set(e.unitId, e);
         const key = asString(e.protectedSource);
-        if (!bySource.has(key)) bySource.set(key, []);
-        bySource.get(key).push(e);
+        // Only index by a non-empty protected source: an entry without one
+        // cannot be matched by source and must never share the "" bucket.
+        if (trim(key)) {
+          if (!bySource.has(key)) bySource.set(key, []);
+          bySource.get(key).push(e);
+        }
       }
       const news = newSegments || [];
       const newSourceCount = new Map();
-      for (const s of news) { const k = asString(s.protectedSource); newSourceCount.set(k, (newSourceCount.get(k) || 0) + 1); }
+      for (const s of news) { const k = asString(s.protectedSource); if (trim(k)) newSourceCount.set(k, (newSourceCount.get(k) || 0) + 1); }
 
       const rows = [];
       const safe = [], suggestions = [], ambiguous = [], modified = [], added = [];
@@ -636,19 +646,46 @@ https://github.com/nodeca/pako/blob/main/LICENSE
      * existing translation; returns sparse changes. `groups` from
      * duplicateGroups(segments).
      */
-    function planDuplicateFill(groups) {
+    function planDuplicateFill(groups, opts) {
+      const o = opts || {};
+      const choices = o.choices instanceof Map ? o.choices : new Map();
       const changes = [];
-      let divergentGroups = 0;
+      let divergentGroups = 0, skippedDivergent = 0, ambiguousMembers = 0, filledGroups = 0;
       for (const g of groups || []) {
         if (g.emptyCount === 0 || !g.translations.length) continue;
-        if (g.divergent) divergentGroups += 1;
-        const fill = g.translations[0];
+        let fill;
+        if (g.translations.length > 1) {
+          divergentGroups += 1;
+          // Never pick a translation on the user's behalf: a group with several
+          // distinct translations is ambiguous and is skipped unless the user
+          // explicitly chooses one for this group.
+          if (!choices.has(g.key)) { skippedDivergent += 1; ambiguousMembers += g.emptyCount; continue; }
+          fill = trim(choices.get(g.key));
+          if (!fill) { skippedDivergent += 1; ambiguousMembers += g.emptyCount; continue; }
+        } else {
+          fill = g.translations[0];
+        }
+        filledGroups += 1;
         for (const s of g.entries || []) {
           if (isCompleted(s)) continue;
           changes.push({ unitId: s.unitId, field: 'translation', before: asString(s.translation), after: fill });
         }
       }
-      return { changes, divergentGroups };
+      return { changes, divergentGroups, skippedDivergent, ambiguousMembers, filledGroups };
+    }
+
+    /** At most `size` consecutive 1-based page numbers, centred on `current`. */
+    function pageWindow(current, total, size) {
+      const n = Math.max(1, Math.floor(total) || 1);
+      const s = Math.max(1, Math.floor(size) || 9);
+      const cur = Math.min(Math.max(1, Math.floor(current) || 1), n);
+      const out = [];
+      if (n <= s) { for (let p = 1; p <= n; p += 1) out.push(p); return out; }
+      let start = cur - Math.floor(s / 2);
+      if (start < 1) start = 1;
+      if (start + s - 1 > n) start = n - s + 1;
+      for (let p = start; p < start + s; p += 1) out.push(p);
+      return out;
     }
 
     function isProject(doc) {
@@ -677,6 +714,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       isLatinTerm, sourceContains, checkSegmentTerminology,
       duplicateGroups, planDuplicateFill, computeView, statusStats,
       planHandoff, planMigration,
+      pageWindow,
       isProject, projectValidate, PROJECT_FORMAT, PROJECT_VERSION,
     };
   })();
@@ -715,6 +753,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       unchangedHint:'仅修改 translation；其他信息保持不变',placeholderMismatch:'⚠ 占位符数量或顺序与原文不一致',
       copyOne:'↓ 复制此条原文',replaceKeywords:'替换关键词',noResults:'没有符合当前筛选条件的条目。',
       pages:'{p} / {total} 页 · {count} 条',filledCount:' / {total} 已填写',unsaved:'存在未导出的修改',exported:'已导出当前修改',
+      pagerLabel:'分页',jumpGo:'跳转',jumpLabel:'跳转到页码',jumpRange:'仅允许 1 - {n} 页',pageOf:'第 {p} / {total} 页',
       phWarningCount:'{n} 条占位符提醒',noPhWarning:'占位符检查无提醒',editable:'可编辑',
       copiedOne:'已复制原文到译文框',copiedAll:'已复制 {n} 条原文到译文框',
       confirmCopyOne:'本条已经有译文，复制原文会覆盖它。确定继续吗？',
@@ -776,11 +815,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       clearDraft:'清除本机草稿',clearDraftConfirm1:'第一次确认：清除当前项目的本机草稿？',clearDraftConfirm2:'第二次确认：草稿删除后无法恢复，确定清除？',draftCleared:'草稿已清除',noDraft:'当前项目没有本机草稿',draftBackupSaved:'草稿备份已导出',
       projectAria:'编辑工程',exportProject:'导出编辑工程 JSON',importProject:'导入编辑工程 JSON',projectHint:'编辑工程独立保存状态标记、备注与忽略项，不会写入游戏翻译包。',
       projectSaved:'编辑工程已导出，请另行备份',projectBad:'不是本编辑器支持的编辑工程文件',projectLoaded:'编辑工程已导入：状态 {n} 条',projectMismatch:'工程对应的 Kit 与当前 Kit 不同；仅合并条目 ID 相同且原文一致的状态标记',projectTranslationsConfirm:'工程内含译文：是否用其中译文填充当前空白条目？',projectFilled:'已从工程填充 {n} 条空白译文',
+      projectSkipped:'已跳过 {n} 条无法确认原文的状态记录',
       safetyIntro:'安全检查只比对结构与占位符，绝不会修改任何译文。',safetyCheckAll:'检查全部条目',safetyCheckCurrent:'检查当前条目',safetyOk:'未发现结构问题。',safetyFound:'发现 {n} 条问题',safetyReset:'已清除检查结果',safetyNone:'尚未运行检查。',
       sevError:'错误',sevWarn:'警告',sevInfo:'提示',locate:'定位',
       issue_PLACEHOLDER_COUNT_CHANGED:'占位符数量与原文不一致',issue_PLACEHOLDER_MISMATCH:'占位符与原文不匹配',issue_PLACEHOLDER_ORDER_CHANGED:'占位符顺序与原文不一致',issue_UNEXPECTED_STRUCTURE:'译文里出现原文没有的结构（宏/变量/标签/链接）',issue_SAME_AS_SOURCE:'译文与原文完全相同',issue_EDGE_WHITESPACE:'译文首尾有多余空白',
       termIntro:'利用关键词词典检查原文术语是否按词典翻译；只提示，不自动修改。',termCheck:'检查术语一致性',termNone:'未发现术语不一致。',termFound:'发现 {n} 条术语提醒',termExpected:'推荐译法',termIgnore:'忽略此提醒',termIgnored:'已忽略该提醒',termApply:'采用推荐译法',termApplyConfirm:'把条目 {id} 译文中的“{term}”替换为“{expected}”？',termApplied:'已替换 {n} 处',
       dupIntro:'找出保护后原文完全相同的条目，帮助复用译文；相同原文也可能因语境不同而需要不同译文。',dupNone:'没有完全重复的原文。',dupFound:'共 {n} 组重复原文',dupCount:'{n} 条',dupDivergent:'存在不同译文',dupAllSame:'译文一致',dupFill:'用已有译文填充空白条目',dupFillNone:'没有可自动填充的空白条目。',dupFillConfirm:'将把 {n} 条空白条目填充为同组已有译文（不会覆盖已有译文；其中 {div} 组存在不同译文，请留意）。继续吗？',dupFilled:'已填充 {n} 条空白译文',
+      dupAmbiguous:'同组存在多个不同译文',dupChoose:'选择用于填充的译文',dupSkipReport:'已跳过 {n} 组歧义（{m} 条空白）。',dupFilledReport:'已填充 {n} 条空白译文；跳过 {skipped} 组歧义。',dupFillConfirm2:'将把 {n} 条空白条目填充为同组已有译文（不会覆盖已有译文）。未选择的歧义组会被跳过。继续吗？',
       conflictIntro:'导入已有译文时若与当前译文不同，会在此逐条预览。',conflictNone:'没有翻译冲突。',conflictKeep:'保留当前',conflictTake:'采用导入',conflictApplyAll:'全部采用导入',conflictKeepAll:'全部保留当前',conflictApply:'应用所选',conflictApplied:'已应用 {n} 条',handoffStats:'导入预览：可补充 {addable} 条，内容一致 {identical} 条，冲突 {conflict} 条，无法匹配 {missing} 条，结构异常 {bad} 条。',handoffKeepReport:'已保留当前译文，跳过 {n} 条冲突。',
       mergePreview:'预览冲突后逐条选择',mergeKeep:'保留当前译文，跳过冲突',
       migrateBtn:'迁移新版本译文',migrateWrongFile:'请选择旧版本翻译（已翻译的 Kit ZIP、JSONL 或编辑工程 JSON）。',migrateIntro:'先打开新版本 Kit，再选择旧版本翻译，工具按稳定 ID 与保护后原文分析差异。',migrateAnalyzed:'差异分析完成',migrateSafe:'可安全迁移',migrateSuggestion:'原文相同但 ID 不同（建议）',migrateAmbiguous:'存在匹配歧义',migrateModified:'原文已修改',migrateAdded:'新增条目',migrateUnchanged:'未变化',migrateDeleted:'已删除旧条目',migrateApply:'执行迁移（仅填充空白）',migrateApplyConfirm:'将向 {n} 条空白译文迁移旧译文。继续吗？',migrateSuggestionConfirm:'另有 {n} 条“原文相同但 ID 不同”的建议，是否一并采用到空白条目？',migrateNone:'没有可安全迁移的译文。',migrateApplied:'迁移完成：{n} 条',migrateDeletedHint:'被删除的旧条目只保留在报告中，不会映射到其他条目。',
@@ -812,6 +853,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       unchangedHint:'Only translation is editable; all other fields stay unchanged',placeholderMismatch:'⚠ Placeholder count or order differs from the source',
       copyOne:'↓ Copy this source',replaceKeywords:'Replace keywords',noResults:'No entries match your current filters.',
       pages:'Page {p} / {total} · {count} entries',filledCount:' / {total} translated',unsaved:'Unexported changes',exported:'Current changes exported',
+      pagerLabel:'Pagination',jumpGo:'Go',jumpLabel:'Go to page',jumpRange:'Only pages 1 - {n} exist',pageOf:'Page {p} of {total}',
       phWarningCount:'{n} placeholder warnings',noPhWarning:'No placeholder warnings',editable:'Ready to edit',
       copiedOne:'Source copied to translation field',copiedAll:'Copied {n} source entries to translation fields',
       confirmCopyOne:'This entry already has a translation. Copying the source will overwrite it. Continue?',
@@ -873,11 +915,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       clearDraft:'Clear local draft',clearDraftConfirm1:'First confirmation: clear the local draft for this project?',clearDraftConfirm2:'Second confirmation: deleted drafts cannot be recovered. Clear it?',draftCleared:'Draft cleared',noDraft:'No local draft for this project',draftBackupSaved:'Draft backup exported',
       projectAria:'Editor project',exportProject:'Export project JSON',importProject:'Import project JSON',projectHint:'The project file keeps status marks, notes, and ignored terms; it is never written into the Kit.',
       projectSaved:'Project exported. Keep a separate backup.',projectBad:'Not a supported editor project file',projectLoaded:'Project imported: {n} status records',projectMismatch:'The project belongs to a different Kit; only status for identical unitId + source is merged',projectTranslationsConfirm:'The project contains translations: fill the current blank entries from it?',projectFilled:'Filled {n} blank translations from the project',
+      projectSkipped:'Skipped {n} status records whose source could not be confirmed',
       safetyIntro:'The safety check only compares structure and placeholders; it never changes any translation.',safetyCheckAll:'Check all entries',safetyCheckCurrent:'Check current entry',safetyOk:'No structural problems found.',safetyFound:'{n} problem(s) found',safetyReset:'Check results cleared',safetyNone:'No check has been run yet.',
       sevError:'Error',sevWarn:'Warning',sevInfo:'Hint',locate:'Locate',
       issue_PLACEHOLDER_COUNT_CHANGED:'Placeholder count differs from the source',issue_PLACEHOLDER_MISMATCH:'Placeholders do not match the source',issue_PLACEHOLDER_ORDER_CHANGED:'Placeholder order differs from the source',issue_UNEXPECTED_STRUCTURE:'Translation contains structure the source does not (macro / variable / tag / link)',issue_SAME_AS_SOURCE:'Translation is identical to the source',issue_EDGE_WHITESPACE:'Translation has extra leading or trailing whitespace',
       termIntro:'Use the keyword glossary to check whether source terms were translated as specified; advisory only.',termCheck:'Check terminology',termNone:'No terminology inconsistency found.',termFound:'{n} terminology warning(s)',termExpected:'Expected',termIgnore:'Ignore warning',termIgnored:'Warning ignored',termApply:'Apply expected term',termApplyConfirm:'Replace “{term}” with “{expected}” in entry {id}?',termApplied:'Replaced {n} occurrence(s)',
       dupIntro:'Find entries whose protected source is identical, to reuse translations; identical source may still need different wording by context.',dupNone:'No duplicate source text found.',dupFound:'{n} duplicate group(s)',dupCount:'{n} entries',dupDivergent:'Different translations',dupAllSame:'Translations identical',dupFill:'Fill blanks from an existing translation',dupFillNone:'No blank entry can be filled automatically.',dupFillConfirm:'Fill {n} blank entries from an identical-source translation? Existing translations are never overwritten ({div} group(s) have divergent translations).',dupFilled:'Filled {n} blank translation(s)',
+      dupAmbiguous:'Several different translations',dupChoose:'Choose a translation to fill',dupSkipReport:'Skipped {n} ambiguous group(s) ({m} blank entries).',dupFilledReport:'Filled {n} blank entries; skipped {skipped} ambiguous group(s).',dupFillConfirm2:'Fill {n} blank entries from an identical-source translation? Existing translations are never overwritten. Unselected ambiguous groups are skipped.',
       conflictIntro:'When an imported translation differs from the current one it is previewed here.',conflictNone:'No translation conflicts.',conflictKeep:'Keep current',conflictTake:'Take imported',conflictApplyAll:'Take imported for all',conflictKeepAll:'Keep current for all',conflictApply:'Apply selected',conflictApplied:'Applied {n} entry/entries',handoffStats:'Import preview: {addable} addable, {identical} identical, {conflict} conflict(s), {missing} unmatched, {bad} malformed.',handoffKeepReport:'Kept current translations; skipped {n} conflict(s).',
       mergePreview:'Preview conflicts and choose each',mergeKeep:'Keep current, skip conflicts',
       migrateBtn:'Migrate translations to this version',migrateWrongFile:'Choose old-version translations (a translated Kit ZIP, JSONL, or project JSON).',migrateIntro:'Open the new-version Kit, then pick the old translations; matching uses stable ID and protected source.',migrateAnalyzed:'Difference analysis complete',migrateSafe:'Safe to migrate',migrateSuggestion:'Same source, different ID (suggested)',migrateAmbiguous:'Ambiguous matches',migrateModified:'Source changed',migrateAdded:'New entries',migrateUnchanged:'Unchanged',migrateDeleted:'Removed old entries',migrateApply:'Run migration (fill blanks only)',migrateApplyConfirm:'Migrate old translations into {n} blank entries?',migrateSuggestionConfirm:'Also adopt {n} “same source, different ID” suggestion(s) into blank entries?',migrateNone:'Nothing can be migrated safely.',migrateApplied:'Migrated {n} entry/entries',migrateDeletedHint:'Removed old entries are reported only and never mapped onto other entries.'
@@ -1104,19 +1148,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     statusSel.value=meta.status;
     statusSel.addEventListener('change',()=>{
       const before=metaOf(s.unitId).status;const after=statusSel.value;if(before===after)return;
-      model.seq++;commitEntry({label:tr('statusLabel'),ops:[{unitId:s.unitId,target:'meta',field:'status',before,after}]});
+      commitEntry({label:tr('statusLabel'),ops:[{unitId:s.unitId,target:'meta',field:'status',before,after}]});
     });
     const note=document.createElement('input');note.type='text';note.className='note';note.maxLength=200;note.value=meta.note||'';
     note.placeholder=tr('notePlaceholder');note.setAttribute('aria-label',tr('noteLabel'));note.title=tr('statusSavedNote');
     note.addEventListener('focus',()=>{note.dataset.before=metaOf(s.unitId).note||'';});
     note.addEventListener('blur',()=>{
       const before=note.dataset.before??'';const after=note.value;if(before===after)return;
-      model.seq++;commitEntry({label:tr('noteLabel'),ops:[{unitId:s.unitId,target:'meta',field:'note',before,after}]});
+      commitEntry({label:tr('noteLabel'),ops:[{unitId:s.unitId,target:'meta',field:'note',before,after}]});
     });
     statusRow.append(statusLbl,statusSel,note);
     function changeTo(next){
       if(String(s.translation??'')===next)return false;
-      textarea.value=next;s.translation=next;model.seq++;model.modified=model.seq>model.lastExportSeq;
+      textarea.value=next;s.translation=next;markDirty();
       invalidateUnit(s.unitId);
       badgeUpdate();warningUpdate();updateCounts();queueDraft();refreshAnalysisSoon();return true;
     }
@@ -1134,25 +1178,66 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     textarea.addEventListener('keydown',e=>{
       if(e.altKey&&e.key==='Enter'){
         e.preventDefault();const all=[...document.querySelectorAll('.translation')];const pos=all.indexOf(textarea);
-        if(pos<all.length-1){all[pos+1].focus();}else if(model.page<Math.ceil(model.visible.length/(+$('pageSize').value))-1){model.page++;renderList();document.querySelector('.translation')?.focus();}
+        if(pos<all.length-1){all[pos+1].focus();}else{const r=gotoPage(model.page+1);if(r){setTimeout(()=>document.querySelector('.translation')?.focus(),0);}}
       }
     });
     textarea.addEventListener('blur',()=>{
       if(model.fieldStart&&model.fieldStart.unitId===s.unitId){
         const before=model.fieldStart.value;const after=String(s.translation??'');model.fieldStart=null;
-        if(before!==after){model.seq++;commitEntry({label:tr('translationLabel'),ops:[{unitId:s.unitId,target:'seg',field:'translation',before,after}],noApply:true});}
+        if(before!==after){commitEntry({label:tr('translationLabel'),ops:[{unitId:s.unitId,target:'seg',field:'translation',before,after}],noApply:true,count:false});}
       }
       if(model.filter!=='all'||model.sort!=='default'||model.query||model.termFilter) setTimeout(()=>{if(document.activeElement!==textarea){updateFilter();renderList();}},25);
     });
     tw.append(header,textarea,foot,statusRow);body.append(label1,orig,copybar,tw);item.append(head,body);return item;
   }
   function renderList(){
-    updateFilter();const ps=+$('pageSize').value;const start=model.page*ps;const arr=model.visible.slice(start,start+ps);
+    updateFilter();const ps=+$('pageSize').value;const pages=Math.max(1,Math.ceil(model.visible.length/ps));
+    model.page=Math.max(0,Math.min(model.page,pages-1));
+    const start=model.page*ps;const arr=model.visible.slice(start,start+ps);
     const frag=document.createDocumentFragment();if(!arr.length){const div=document.createElement('div');div.className='page-empty';div.textContent=tr('noResults');frag.append(div);}
     else for(const {s,i} of arr)frag.append(makeItem(s,i));
     $('list').replaceChildren(frag);
-    const pages=Math.max(1,Math.ceil(model.visible.length/ps));$('pageText').textContent=tr('pages',{p:model.page+1,total:pages,count:model.visible.length.toLocaleString()});
-    $('prev').disabled=model.page===0;$('next').disabled=model.page>=pages-1;
+    renderPagers(pages);
+  }
+  // Top and bottom navigation are two views over the same model.page state.
+  function renderPagerInto(node,pages){
+    if(!node)return;
+    const total=Math.max(1,pages);const current=model.page+1;
+    node.replaceChildren();
+    const prev=mkBtn('btn tiny','‹ '+tr('prevPage'),()=>gotoPage(current-1));
+    prev.disabled=current<=1;
+    node.append(prev);
+    const nums=mk('div','pagenums');
+    for(const p of EditorEngine.pageWindow(current,total,9)){
+      const b=mkBtn('btn tiny pnum'+(p===current?' current':''),String(p),()=>gotoPage(p));
+      if(p===current)b.setAttribute('aria-current','page');
+      nums.append(b);
+    }
+    node.append(nums);
+    const next=mkBtn('btn tiny',tr('nextPage')+' ›',()=>gotoPage(current+1));
+    next.disabled=current>=total;
+    node.append(next);
+    node.append(mk('span','',tr('pages',{p:current,total,count:model.visible.length.toLocaleString()})));
+    const jump=mk('div','jump');
+    const inp=document.createElement('input');inp.type='number';inp.min='1';inp.max=String(total);inp.value=String(current);
+    inp.setAttribute('aria-label',tr('jumpLabel'));inp.title=tr('jumpRange',{n:total});
+    const go=()=>{const raw=parseInt(inp.value,10);if(!Number.isFinite(raw)){inp.value=String(current);return;}const target=Math.max(1,Math.min(total,raw));inp.value=String(target);gotoPage(target);};
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();go();}});
+    jump.append(inp,mkBtn('btn tiny',tr('jumpGo'),go));
+    node.append(jump);
+  }
+  function renderPagers(pages){renderPagerInto($('pagerTop'),pages);renderPagerInto($('pagerBottom'),pages);}
+  // Single shared page transition: commits any pending field edit first so a
+  // page change can never drop an in-progress translation, then re-renders both
+  // navigations. Returns whether the page actually changed.
+  function gotoPage(p){
+    commitPendingField();
+    const ps=+$('pageSize').value;const pages=Math.max(1,Math.ceil(model.visible.length/ps));
+    const target=Math.max(0,Math.min(pages-1,p-1));
+    const changed=target!==model.page;model.page=target;
+    renderList();
+    if(changed){const anchor=$('list')||$('pagerTop');if(anchor&&anchor.scrollIntoView)anchor.scrollIntoView({block:'start'});}
+    return changed;
   }
   function downloadBlob(blob,filename){
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;
@@ -1344,13 +1429,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
   function validateHandoffManifest(other){
     const self=model.manifest;
-    if(other.kind!==self.kind||String(other.schemaVersion)!==String(self.schemaVersion)||
-       other.targetStory?.sha256!==self.targetStory?.sha256||
+    validateKitFormat(other);
+    if(other.targetStory?.sha256!==self.targetStory?.sha256||
        other.inventoryFingerprint!==self.inventoryFingerprint||
        other.targetLanguage!==self.targetLanguage)throw Error(tr('handoffBadManifest'));
     // generatedAt and sourceVersion display labels are intentionally ignored.
   }
-  async function readHandoffFile(file){
+  // A file-format check that is valid for ANY version of the kit (used by
+  // cross-version migration, where the story identity is expected to differ).
+  function validateKitFormat(other){
+    if(!other||other.kind!=='dol-p-localization-kit')throw Error(tr('kindMismatch'));
+    if(String(other.schemaVersion||'').split('.')[0]!=='1')throw Error(tr('schemaUnsupported',{ver:other.schemaVersion}));
+  }
+  // Parse a translated kit / JSONL. Same-version handoff enforces full identity;
+  // migration only enforces the format, then matches by stable id + source.
+  async function readTranslatedFile(file,opts){
+    const requireIdentity=!opts||opts.requireIdentity!==false;
     if(file.name.toLowerCase().endsWith('.jsonl')){
       // No manifest in standalone JSONL: exact unit set + every immutable
       // source field below are checked before accepting any translation.
@@ -1358,7 +1452,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
     const zip=await JSZip.loadAsync(file,{checkCRC32:true});
     if(!zip.file('manifest.json')||!zip.file('segments.jsonl'))throw Error(tr('zipMissing',{name:'manifest.json / segments.jsonl'}));
-    validateHandoffManifest(JSON.parse(dec.decode(await zip.file('manifest.json').async('uint8array'))));
+    const manifest=JSON.parse(dec.decode(await zip.file('manifest.json').async('uint8array')));
+    if(requireIdentity)validateHandoffManifest(manifest);else validateKitFormat(manifest);
     const entries=parseJsonl(dec.decode(await zip.file('segments.jsonl').async('uint8array')));
     if(zip.file('segments.csv')){
       const csv=csvParse(dec.decode(await zip.file('segments.csv').async('uint8array')));
@@ -1382,6 +1477,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
     return entries;
   }
+  async function readHandoffFile(file){return readTranslatedFile(file,{requireIdentity:true});}
   async function importHandoff(file){
     if(!model.zip){status(tr('handoffNoKit'),'warn');return;}
     if(model.importing||model.saving)return;
@@ -1418,11 +1514,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if(!model.zip)return;
     const overwrites=model.segments.filter(s=>completed(s)&&s.translation!==s.protectedSource).length;
     if(!confirm(tr('confirmCopyAll',{total:model.segments.length,overwrites})))return;
-    let changed=0;
-    for(const seg of model.segments){if(seg.translation!==seg.protectedSource){seg.translation=seg.protectedSource;changed++;}}
-    if(!changed)return;
-    model.seq++;model.modified=model.seq>model.lastExportSeq;updateCounts();queueDraft();renderList();
-    toast(tr('copiedAll',{n:changed}));
+    // One grouped, undoable operation (recorded as a single history entry).
+    const changes=[];
+    for(const seg of model.segments){
+      if(seg.translation===seg.protectedSource)continue;
+      changes.push({unitId:seg.unitId,field:'translation',before:String(seg.translation??''),after:seg.protectedSource});
+    }
+    if(!changes.length){toast(tr('copiedAll',{n:0}));return;}
+    const n=applyChanges(changes,tr('copyAll'));
+    toast(tr('copiedAll',{n}));
   }
   // ---------------------------------------------------------------------------
   // Editor state: status marks, undo/redo history, analysis, panels.
@@ -1432,6 +1532,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function metaOf(unitId){let m=model.meta.get(unitId);if(!m){m={status:'unmarked',note:''};model.meta.set(unitId,m);}return m;}
   function statusKey(st){return st==='proofread'?'statusProofread':st==='reviewed'?'statusReviewed':st==='flagged'?'statusFlagged':'statusUnmarked';}
   function segById(id){return model.byId.get(id);}
+  // The single place that marks the project as having unexported changes.
+  function markDirty(){model.seq++;model.modified=model.seq>model.lastExportSeq;}
 
   // --- undo / redo: sparse before/after records, never a full-project clone ---
   function applyOps(ops,dir){
@@ -1450,6 +1552,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
   function commitEntry(entry){
     if(!entry.ops||!entry.ops.length)return;
+    if(entry.count!==false)markDirty();
     pushHistory(entry);
     if(!entry.noApply)applyOps(entry.ops,'redo');
     afterChange();
@@ -1462,13 +1565,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function undo(){
     commitPendingField();
     if(model.histIndex<0){toast(tr('undoNothing'));return;}
-    const e=model.hist[model.histIndex];model.seq++;applyOps(e.ops,'undo');model.histIndex--;afterChange();updateUndoButtons();
+    const e=model.hist[model.histIndex];applyOps(e.ops,'undo');model.histIndex--;markDirty();afterChange();updateUndoButtons();
     toast(tr('undone',{label:e.label||''}));
   }
   function redo(){
     commitPendingField();
     if(model.histIndex>=model.hist.length-1)return;
-    model.histIndex++;const e=model.hist[model.histIndex];model.seq++;applyOps(e.ops,'redo');afterChange();updateUndoButtons();
+    model.histIndex++;const e=model.hist[model.histIndex];applyOps(e.ops,'redo');markDirty();afterChange();updateUndoButtons();
     toast(tr('redone',{label:e.label||''}));
   }
   function updateUndoButtons(){
@@ -1487,7 +1590,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const m=metaOf(c.unitId);
       if(m.status!=='unmarked')ops.push({unitId:c.unitId,target:'meta',field:'status',before:m.status,after:'unmarked'});
     }
-    model.seq++;
     commitEntry({label,ops});
     return changes.length;
   }
@@ -1615,6 +1717,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     body.append(mk('p','',tr('dupIntro')));
     if(!model.dupGroups.length){body.append(mk('p','',tr('dupNone')));return;}
     body.append(mk('p','',tr('dupFound',{n:model.dupGroups.length})));
+    const choices=new Map();
     const stack=mk('div','stack');
     for(const g of model.dupGroups){
       const card=mk('div','dup-group');
@@ -1624,17 +1727,29 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       card.append(h);
       card.append(mk('div','snip',String(g.key).slice(0,180)));
       if(g.translations.length)card.append(mk('div','snip',g.translations.map(t=>'• '+t).join('\n')));
+      if(g.divergent&&g.emptyCount>0){
+        card.append(mk('div','snip',tr('dupAmbiguous')));
+        const pick=mk('div','conflict-pick');
+        pick.append(mk('span','',tr('dupChoose')+': '));
+        for(const t of g.translations){
+          const l=mk('label');const r=document.createElement('input');r.type='radio';r.value=t;
+          r.addEventListener('change',()=>choices.set(g.key,t));
+          l.append(r,document.createTextNode(t));pick.append(l);
+        }
+        card.append(pick);
+      }
       stack.append(card);
     }
     body.append(stack);
-    const plan=EditorEngine.planDuplicateFill(model.dupGroups);
     const btn=mkBtn('btn primary',tr('dupFill'),()=>{
-      if(!plan.changes.length){toast(tr('dupFillNone'));return;}
-      if(!confirm(tr('dupFillConfirm',{n:plan.changes.length,div:plan.divergentGroups})))return;
-      const n=applyChanges(plan.changes,tr('dupFill'));
-      toast(tr('dupFilled',{n}));
+      // Recompute with the user's explicit choices: divergent groups are only
+      // filled when the user picked a translation for that group.
+      const plan=EditorEngine.planDuplicateFill(model.dupGroups,{choices});
+      if(!plan.changes.length){toast(plan.skippedDivergent?tr('dupSkipReport',{n:plan.skippedDivergent,m:plan.ambiguousMembers}):tr('dupFillNone'));return;}
+      if(!confirm(tr('dupFillConfirm2',{n:plan.changes.length})))return;
+      applyChanges(plan.changes,tr('dupFill'));
+      toast(tr('dupFilledReport',{n:plan.changes.length,skipped:plan.skippedDivergent}));
     });
-    btn.disabled=!plan.changes.length;
     body.append(btn);
   }
   function renderConflictPanel(){
@@ -1763,7 +1878,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
   function currentIdentity(){const m=model.manifest||{};const seg=model.segments;return {targetStorySha256:m.targetStory?.sha256||'',inventoryFingerprint:m.inventoryFingerprint||'',schemaVersion:m.schemaVersion||'',targetLanguage:m.targetLanguage||'',exportedCount:seg.length,firstUnitId:seg[0]?.unitId||'',lastUnitId:seg[seg.length-1]?.unitId||''};}
   function exportDraftSnapshot(previous,name){
-    const doc={format:EditorEngine.PROJECT_FORMAT,version:EditorEngine.PROJECT_VERSION,projectId:model.draftKey||'',identity:currentIdentity(),savedAt:new Date(previous.updatedAt||Date.now()).toISOString(),records:previous.records||{},ignoredTerms:previous.ignoredTerms||[],translations:previous.translations||{},sources:{}};
+    const sources={};for(const s of model.segments)sources[s.unitId]=String(s.protectedSource??'');
+    const doc={format:EditorEngine.PROJECT_FORMAT,version:EditorEngine.PROJECT_VERSION,projectId:model.draftKey||'',identity:currentIdentity(),savedAt:new Date(previous.updatedAt||Date.now()).toISOString(),records:previous.records||{},ignoredTerms:previous.ignoredTerms||[],translations:previous.translations||{},sources};
     downloadBlob(new Blob([JSON.stringify(doc,null,2)+'\n'],{type:'application/json;charset=utf-8'}),(name||model.filename||'draft').replace(/\.zip$/i,'')+'-draft.dolpkit.json');
     toast(tr('draftBackupSaved'));
   }
@@ -1794,24 +1910,41 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const v=EditorEngine.projectValidate(doc);
       if(!v.ok){status(tr('projectBad'),'error');return;}
       const self=currentIdentity();const id=doc.identity||{};
-      const same=!!id.targetStorySha256&&id.targetStorySha256===self.targetStorySha256&&id.inventoryFingerprint===self.inventoryFingerprint;
-      const ops=[];let recCount=0;
+      const sameKit=!!id.targetStorySha256&&id.targetStorySha256===self.targetStorySha256&&id.inventoryFingerprint===self.inventoryFingerprint;
+      const sources=doc.sources&&typeof doc.sources==='object'?doc.sources:null;
+      // A record may only be applied when its source can be confirmed:
+      // same kit -> unitId is trustworthy; different kit -> the recorded
+      // protectedSource must equal the current one. Never import by unitId alone.
+      const confirmed=seg=>{
+        if(sameKit)return true;
+        if(!sources)return false;
+        return typeof sources[seg.unitId]==='string'&&sources[seg.unitId]===String(seg.protectedSource??'');
+      };
+      const ops=[];let recCount=0,skipped=0;
       for(const s of model.segments){
         const r=v.records[s.unitId];if(!r)continue;
+        if(!confirmed(s)){skipped++;continue;}
         const m=metaOf(s.unitId);recCount++;
         if(r.status!==m.status)ops.push({unitId:s.unitId,target:'meta',field:'status',before:m.status,after:r.status});
         if(r.note!==m.note)ops.push({unitId:s.unitId,target:'meta',field:'note',before:m.note,after:r.note});
       }
       for(const key of v.ignoredTerms)model.ignoredTerms.add(key);
       let filled=0;
-      if(same){
+      if(sameKit||sources){
         const fillChanges=[];
-        for(const s of model.segments){if(String(s.translation??'').trim())continue;const t=v.translations[s.unitId];if(typeof t==='string'&&t.trim())fillChanges.push({unitId:s.unitId,field:'translation',before:String(s.translation??''),after:t});}
+        for(const s of model.segments){
+          if(String(s.translation??'').trim())continue;
+          if(!confirmed(s))continue;
+          const t=v.translations[s.unitId];
+          if(typeof t==='string'&&t.trim())fillChanges.push({unitId:s.unitId,field:'translation',before:String(s.translation??''),after:t});
+        }
         if(fillChanges.length&&confirm(tr('projectTranslationsConfirm'))){
           for(const c of fillChanges)ops.push({unitId:c.unitId,target:'seg',field:'translation',before:c.before,after:c.after});
           filled=fillChanges.length;
         }
-      }else status(tr('projectMismatch'),'warn');
+      }
+      if(!sameKit)status(tr('projectMismatch'),'warn');
+      if(skipped)status(tr('projectSkipped',{n:skipped}),'warn');
       if(ops.length)commitEntry({label:tr('importProject'),ops});else{model.analysisStale=true;updateCounts();}
       toast(tr('projectLoaded',{n:recCount}));if(filled)toast(tr('projectFilled',{n:filled}));
     }catch(e){status(tr('projectBad'),'error');}
@@ -1825,8 +1958,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const sources=doc.sources&&typeof doc.sources==='object'?doc.sources:{};
       return Object.entries(v.translations).map(([unitId,translation])=>({unitId,translation,protectedSource:sources[unitId]}));
     }
-    const entries=await readHandoffFile(file);
-    return [...entries.values()].map(e=>({unitId:e.unitId,translation:String(e.translation??''),protectedSource:e.protectedSource}));
+    // Cross-version migration: DO NOT require the current story identity; only
+    // the file format and structure are validated. Matching happens later by
+    // stable unitId + protectedSource.
+    const entries=await readTranslatedFile(file,{requireIdentity:false});
+    return entries.map(e=>({unitId:e.unitId,translation:String(e.translation??''),protectedSource:e.protectedSource}));
   }
   async function migrate(file){
     if(!model.zip){status(tr('handoffNoKit'),'warn');return;}
@@ -1867,8 +2003,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   $('search').addEventListener('input',()=>{model.query=$('search').value;model.page=0;renderList();});
   $('filter').addEventListener('change',()=>{model.filter=$('filter').value;model.page=0;renderList();});
   $('pageSize').addEventListener('change',()=>{model.page=0;renderList();});
-  $('prev').addEventListener('click',()=>{model.page=Math.max(0,model.page-1);renderList();$('workspace').scrollIntoView({block:'start'});});
-  $('next').addEventListener('click',()=>{model.page++;renderList();$('workspace').scrollIntoView({block:'start'});});
   $('sizeDown').addEventListener('click',()=>{model.size=Math.max(13,model.size-1);document.documentElement.style.setProperty('--source-size',model.size+'px');document.documentElement.style.setProperty('--edit-size',model.size+'px');});
   $('sizeUp').addEventListener('click',()=>{model.size=Math.min(24,model.size+1);document.documentElement.style.setProperty('--source-size',model.size+'px');document.documentElement.style.setProperty('--edit-size',model.size+'px');});
   $('themeBtn').addEventListener('click',()=>{document.body.classList.toggle('dark');$('themeBtn').textContent=tr(document.body.classList.contains('dark')?'lightTheme':'darkTheme');});

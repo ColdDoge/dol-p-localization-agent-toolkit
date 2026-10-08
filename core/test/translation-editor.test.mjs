@@ -232,7 +232,7 @@ test('migration: never auto-migrates a modified (same id, changed source) entry'
   assert.deepEqual(plan.modified.map((x) => x.unitId), ['1']);
 });
 
-test('duplicate fill: fills only blank members and reports divergence', () => {
+test('duplicate fill: a multi-translation group is skipped, never auto-filled', () => {
   const segments = [
     seg({ unitId: '1', protectedSource: 'Same.', translation: '译文。' }),
     seg({ unitId: '2', protectedSource: 'Same.', translation: '' }),
@@ -240,8 +240,60 @@ test('duplicate fill: fills only blank members and reports divergence', () => {
   ];
   const groups = E.duplicateGroups(segments);
   const plan = E.planDuplicateFill(groups);
-  assert.deepEqual(plan.changes.map((c) => c.unitId), ['2']);
+  assert.deepEqual(plan.changes, [], 'ambiguous group must not be filled without an explicit choice');
   assert.equal(plan.divergentGroups, 1);
+  assert.equal(plan.skippedDivergent, 1);
+  assert.equal(plan.ambiguousMembers, 1);
+});
+
+test('duplicate fill: a uniform group fills blanks, and an explicit choice resolves ambiguity', () => {
+  const uniform = [
+    seg({ unitId: '1', protectedSource: 'Same.', translation: '译文。' }),
+    seg({ unitId: '2', protectedSource: 'Same.', translation: '' }),
+  ];
+  const p1 = E.planDuplicateFill(E.duplicateGroups(uniform));
+  assert.deepEqual(p1.changes.map((c) => c.unitId), ['2']);
+  assert.equal(p1.changes[0].after, '译文。');
+
+  const divergent = [
+    seg({ unitId: '1', protectedSource: 'Same.', translation: '甲' }),
+    seg({ unitId: '2', protectedSource: 'Same.', translation: '' }),
+    seg({ unitId: '3', protectedSource: 'Same.', translation: '乙' }),
+  ];
+  const groups = E.duplicateGroups(divergent);
+  assert.equal(E.planDuplicateFill(groups).changes.length, 0);
+  const chosen = E.planDuplicateFill(groups, { choices: new Map([[groups[0].key, '乙']]) });
+  assert.deepEqual(chosen.changes.map((c) => c.unitId), ['2']);
+  assert.equal(chosen.changes[0].after, '乙');
+  assert.equal(chosen.skippedDivergent, 0);
+});
+
+test('pageWindow: total 1/5/9 shows all pages; 10/100 centres the current page', () => {
+  const r = (a, b) => { const o = []; for (let p = a; p <= b; p += 1) o.push(p); return o; };
+  assert.deepEqual(E.pageWindow(1, 1, 9), [1]);
+  assert.deepEqual(E.pageWindow(3, 5, 9), r(1, 5));
+  assert.deepEqual(E.pageWindow(5, 9, 9), r(1, 9));
+  // total 10: current centred where possible, clamped at both ends
+  assert.deepEqual(E.pageWindow(1, 10, 9), r(1, 9));
+  assert.deepEqual(E.pageWindow(2, 10, 9), r(1, 9));
+  assert.deepEqual(E.pageWindow(5, 10, 9), r(1, 9));
+  assert.deepEqual(E.pageWindow(6, 10, 9), r(2, 10));
+  assert.deepEqual(E.pageWindow(10, 10, 9), r(2, 10));
+  // total 100: a 9-wide window centred on the current page
+  assert.deepEqual(E.pageWindow(1, 100, 9), r(1, 9));
+  assert.deepEqual(E.pageWindow(50, 100, 9), r(46, 54));
+  assert.deepEqual(E.pageWindow(100, 100, 9), r(92, 100));
+  assert.deepEqual(E.pageWindow(99, 100, 9), r(92, 100));
+  assert.equal(E.pageWindow(50, 100, 9).length, 9);
+});
+
+test('migration: an entry without a protected source is never matched by source', () => {
+  const plan = E.planMigration(
+    [{ unitId: 'old', translation: 'x' }],
+    [seg({ unitId: 'new', protectedSource: 'Brand.', translation: '' })],
+  );
+  assert.deepEqual(plan.added.map((x) => x.unitId), ['new']);
+  assert.equal(plan.suggestions.length, 0);
 });
 
 test('project: validates format/version and sanitizes records', () => {

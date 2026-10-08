@@ -416,3 +416,197 @@ test('markup: every element id referenced by $() exists in the HTML', () => {
   const missing = ids.filter((id) => !present.has(id));
   assert.deepEqual(missing, [], `ids referenced by the script but missing from the markup: ${missing.join(', ')}`);
 });
+
+// ---------------------------------------------------------------------------
+// Part 2: pagination and the reported data-safety fixes.
+// ---------------------------------------------------------------------------
+
+const asFile = (buffer, name) => { buffer.name = name; buffer.size = buffer.length; return buffer; };
+const pnums = (node) => node.querySelectorAll('.pnum').map((b) => b.textContent);
+const currentPnum = (node) => node.querySelectorAll('.pnum').filter((b) => b.classList.contains('current')).map((b) => b.textContent)[0];
+function clickPnum(boot, label) {
+  const b = boot.el('pagerTop').querySelectorAll('.pnum').find((x) => x.textContent === String(label));
+  assert.ok(b, `page button ${label} exists`);
+  b.click();
+}
+function setPageSize(boot, n) { boot.el('pageSize').value = String(n); boot.el('pageSize').dispatchEvent('change'); }
+
+test('pagination: 9-page window, shared state, number/enter/input jumps', async () => {
+  const boot = makeBoot();
+  const segs = [];
+  for (let i = 0; i < 100; i += 1) segs.push(segment(i, { passage: `P${i}` }));
+  await boot.loadKit(await buildKit(boot.JSZip, segs));
+  setPageSize(boot, 20); // 5 pages
+  assert.deepEqual(pnums(boot.el('pagerTop')), ['1', '2', '3', '4', '5'], 'fewer than 9 pages -> show all');
+  assert.equal(currentPnum(boot.el('pagerTop')), '1');
+
+  // number button jump, and both navigations share the same state
+  clickPnum(boot, 3);
+  assert.equal(boot.app.model.page, 2);
+  assert.equal(currentPnum(boot.el('pagerTop')), '3');
+  assert.equal(currentPnum(boot.el('pagerBottom')), '3', 'both pagers share one page state');
+  assert.deepEqual(pnums(boot.el('pagerBottom')), ['1', '2', '3', '4', '5']);
+
+  // direct input + Enter jump
+  const inp = boot.el('pagerTop').querySelectorAll('input')[0];
+  inp.value = '5';
+  inp.dispatchEvent('keydown', { key: 'Enter' });
+  assert.equal(boot.app.model.page, 4);
+  assert.equal(currentPnum(boot.el('pagerBottom')), '5');
+
+  // out-of-range input is clamped to an existing page
+  const inp2 = boot.el('pagerBottom').querySelectorAll('input')[0];
+  inp2.value = '999';
+  inp2.dispatchEvent('keydown', { key: 'Enter' });
+  assert.equal(boot.app.model.page, 4, 'jump above the last page is clamped');
+  assert.equal(inp2.value, '5');
+  const inp3 = boot.el('pagerTop').querySelectorAll('input')[0];
+  inp3.value = 'abc';
+  inp3.dispatchEvent('keydown', { key: 'Enter' });
+  assert.equal(boot.app.model.page, 4, 'a non-numeric jump keeps the current page');
+});
+
+test('pagination: a 9-wide centred window over 100 pages, clamped at both ends', async () => {
+  const boot = makeBoot();
+  const segs = [];
+  for (let i = 0; i < 100; i += 1) segs.push(segment(i));
+  await boot.loadKit(await buildKit(boot.JSZip, segs));
+  setPageSize(boot, 1); // 100 pages
+  assert.deepEqual(pnums(boot.el('pagerTop')), ['1', '2', '3', '4', '5', '6', '7', '8', '9']);
+  const inp = boot.el('pagerTop').querySelectorAll('input')[0];
+  inp.value = '50';
+  inp.dispatchEvent('keydown', { key: 'Enter' });
+  assert.deepEqual(pnums(boot.el('pagerTop')), ['46', '47', '48', '49', '50', '51', '52', '53', '54']);
+  inp.value = '100';
+  inp.dispatchEvent('keydown', { key: 'Enter' });
+  assert.deepEqual(pnums(boot.el('pagerTop')), ['92', '93', '94', '95', '96', '97', '98', '99', '100']);
+});
+
+test('pagination: jumping after a filter keeps data intact and does not lose edits', async () => {
+  const boot = makeBoot();
+  const segs = [];
+  for (let i = 0; i < 60; i += 1) segs.push(segment(i, { translation: i < 40 ? 'done' : '' }));
+  await boot.loadKit(await buildKit(boot.JSZip, segs));
+  setPageSize(boot, 20);
+  // edit the first entry of page 1
+  const t1 = boot.el('list').querySelectorAll('.translation');
+  t1[0].value = '第一页第一条'; t1[0].dispatchEvent('input');
+  assert.equal(boot.app.model.segments[0].translation, '第一页第一条');
+  // filter to untranslated (40 translated of 60 -> 20 untranslated -> 1 page)
+  boot.el('filter').value = 'todo'; boot.el('filter').dispatchEvent('change');
+  assert.equal(boot.app.model.visible.length, 20);
+  // filter to translated (40 -> 2 pages) and jump to page 2
+  boot.el('filter').value = 'done'; boot.el('filter').dispatchEvent('change');
+  assert.equal(pnums(boot.el('pagerTop')).length, 2);
+  clickPnum(boot, 2);
+  assert.equal(boot.app.model.page, 1);
+  // the edited entry lived on page 1; go back and confirm it survived, in place
+  clickPnum(boot, 1);
+  assert.equal(boot.el('list').querySelectorAll('.translation')[0].value, '第一页第一条');
+  assert.equal(boot.app.model.segments[0].translation, '第一页第一条');
+  // no cross-entry mixing: the second entry is untouched
+  assert.equal(boot.app.model.segments[1].translation, 'done');
+});
+
+test('copy-all is one undoable/redoable batch', async () => {
+  const boot = makeBoot();
+  const segs = [segment(1, { translation: 'mine-1' }), segment(2, { translation: '' })];
+  await boot.loadKit(await buildKit(boot.JSZip, segs));
+  const model = boot.app.model;
+  boot.el('copyAllBtn').click();
+  assert.ok(model.segments.every((s) => s.translation === s.protectedSource), 'all sources copied');
+  assert.equal(model.hist.length, 1, 'copy-all is a single history entry');
+  boot.app.undo();
+  assert.equal(model.segments[0].translation, 'mine-1');
+  assert.equal(model.segments[1].translation, '');
+  boot.app.redo();
+  assert.equal(model.segments[0].translation, model.segments[0].protectedSource);
+  assert.ok(model.segments.every((s) => s.translation === s.protectedSource));
+});
+
+test('every real edit marks the project unexported and schedules a draft save', async () => {
+  const boot = makeBoot();
+  const segs = [segment(1, { protectedSource: 'You see Robin.' }), segment(2)];
+  await boot.loadKit(await buildKit(boot.JSZip, segs));
+  const model = boot.app.model;
+  assert.equal(model.modified, false, 'freshly loaded kit is not modified');
+
+  // status change through the real control
+  const sel = boot.el('list').querySelectorAll('select')[0];
+  sel.value = 'reviewed'; sel.dispatchEvent('change');
+  assert.equal(model.modified, true, 'status change marks unexported');
+  assert.equal(model.meta.get('1:0-10').status, 'reviewed');
+  assert.equal(model.draftState, 'saving', 'a draft save is scheduled');
+
+  // exporting clears the unexported flag
+  await boot.app.exportFile('jsonl');
+  assert.equal(model.modified, false, 'export records the exported sequence');
+
+  // batch mark through the real control
+  boot.el('batchStatus').value = 'proofread';
+  boot.el('batchMarkBtn').click();
+  assert.equal(model.modified, true, 'batch mark marks unexported');
+  assert.equal(model.meta.get('2:0-10').status, 'proofread');
+
+  // term fix through the glossary panel
+  await boot.app.exportFile('jsonl'); // reset to exported
+  boot.el('termSource').value = 'Robin'; boot.el('termTarget').value = '罗宾';
+  boot.el('termForm').dispatchEvent('submit', { preventDefault() {} });
+  model.segments[0].translation = 'Robin here';
+  boot.app.recomputeAnalysis();
+  boot.el('panelTermBtn').click();
+  const applyBtn = boot.el('panelBody').querySelectorAll('button').find((b) => b.textContent === boot.app.UI.zh.termApply);
+  assert.ok(applyBtn, 'term apply button present');
+  applyBtn.click();
+  assert.equal(model.segments[0].translation, '罗宾 here', 'term fix replaced the term');
+  assert.equal(model.modified, true, 'term fix marks unexported');
+});
+
+test('migration: a genuinely different-version kit ZIP is accepted (format only), handoff still requires identity', async () => {
+  const boot = makeBoot();
+  const current = [segment(1, { protectedSource: 'Line one.' }), segment(2, { protectedSource: 'Line two.' })];
+  await boot.loadKit(await buildKit(boot.JSZip, current, manifest({ count: 2 })));
+  const model = boot.app.model;
+
+  const oldSegs = [
+    { ...segment(1, { protectedSource: 'Line one.', translation: '第一句旧译文。' }) },
+    { ...segment(2, { protectedSource: 'Old two.', translation: '第二句旧译文。' }) },
+  ];
+  const oldManifest = manifest({ count: 2, extra: { targetStory: { sha256: 'old-version-story' }, inventoryFingerprint: 'OLD-INV', sourceVersion: 'v-old' } });
+  const oldZip = await buildKit(boot.JSZip, oldSegs, oldManifest);
+
+  // cross-version migration must accept the foreign identity
+  await boot.app.migrate(asFile(oldZip, 'old.zip'));
+  assert.ok(model.migratePlan, 'migration plan produced');
+  assert.deepEqual(Array.from(model.migratePlan.safe).map((x) => x.unitId), ['1:0-10']);
+  assert.deepEqual(Array.from(model.migratePlan.modified).map((x) => x.unitId), ['2:0-10']);
+
+  // same-version handoff must still reject the foreign identity (and not change data)
+  const before = JSON.stringify(model.segments.map((s) => s.translation));
+  await boot.app.importHandoff(asFile(oldZip, 'old.zip'));
+  assert.equal(JSON.stringify(model.segments.map((s) => s.translation)), before, 'handoff did not apply a foreign kit');
+});
+
+test('project status is not reused across different kits (verify source, skip unknown)', async () => {
+  const boot = makeBoot();
+  const A = [segment(1, { protectedSource: 'AAA original.' })];
+  const B = [segment(1, { protectedSource: 'BBB original.' })];
+  const zipA = await buildKit(boot.JSZip, A, manifest({ count: 1, extra: { targetStory: { sha256: 'story-A' } } }));
+  const zipB = await buildKit(boot.JSZip, B, manifest({ count: 1, extra: { targetStory: { sha256: 'story-B' } } }));
+
+  await boot.loadKit(zipA, 'A.zip');
+  boot.app.model.meta.set('1:0-10', { status: 'reviewed', note: 'ok' });
+  boot.app.exportProject();
+  const doc = JSON.parse(await boot.blobs[boot.blobs.length - 1].text());
+  assert.equal(doc.sources['1:0-10'], 'AAA original.');
+
+  await boot.loadKit(zipB, 'B.zip');
+  assert.equal((boot.app.model.meta.get('1:0-10') || {}).status ?? 'unmarked', 'unmarked', 'B starts with no status');
+  await boot.app.importProject({ name: 'A.dolpkit.json', size: 10, async text() { return JSON.stringify(doc); } });
+  assert.equal((boot.app.model.meta.get('1:0-10') || {}).status ?? 'unmarked', 'unmarked', 'a different kit must not inherit A status by unitId');
+
+  // a project from the SAME kit still imports its status
+  await boot.loadKit(zipA, 'A2.zip');
+  await boot.app.importProject({ name: 'A.dolpkit.json', size: 10, async text() { return JSON.stringify(doc); } });
+  assert.equal(boot.app.model.meta.get('1:0-10').status, 'reviewed');
+});
