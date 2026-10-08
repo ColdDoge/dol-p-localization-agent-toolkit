@@ -1178,13 +1178,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
     copyBtn.addEventListener('click',()=>{
       if(completed(s)&&s.translation!==s.protectedSource&&!confirm(tr('confirmCopyOne')))return;
-      const before=String(s.translation??'');
-      if(changeTo(s.protectedSource)){recordEdit(tr('copyOne'),before,String(s.translation??''));toast(tr('copiedOne'));}
-      textarea.focus();
+      const before=String(s.translation??'');const taId=textarea.id;
+      if(changeTo(s.protectedSource)){recordEdit(tr('copyOne'),before,String(s.translation??''));toast(tr('copiedOne'));focusById(taId);}
+      else textarea.focus();
     });
     replaceBtn.addEventListener('click',()=>{
-      const before=String(s.translation??'');const result=replaceKeywords(before);
-      if(changeTo(result)){recordEdit(tr('replaceKeywords'),before,String(s.translation??''));textarea.focus();}
+      const before=String(s.translation??'');const result=replaceKeywords(before);const taId=textarea.id;
+      if(changeTo(result)){recordEdit(tr('replaceKeywords'),before,String(s.translation??''));focusById(taId);}
+      else textarea.focus();
     });
     textarea.addEventListener('keydown',e=>{
       if(e.altKey&&e.key==='Enter'){
@@ -1403,9 +1404,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       // Commit state after all validations have passed.
       clearTimeout(debounce);model.zip=zip;model.manifest=manifest;model.segments=segments;model.filename=file.name;
       model.byId=new Map(segments.map(s=>[s.unitId,s]));
-      if(!restored)model.meta=new Map();
+      // Project-scoped state must never leak from the previous Kit. When a draft
+      // is restored, applyDraft() has already loaded the NEW kit's records /
+      // ignored terms / recovery points, so only clear them on a plain import.
+      if(!restored){model.meta=new Map();model.ignoredTerms=new Set();model.recoveries=[];}
+      // Transient analysis / preview state always belongs to the previous Kit.
+      model.safety=new Map();model.termFind=new Map();model.dupGroups=[];model.dupUnits=new Set();model.conflictUnits=new Set();
+      model.previewConflicts=[];model.previewChoices=new Map();model.previewFill=[];model.migratePlan=null;model.fieldStart=null;
+      model.analysisStale=true;model.hist=[];model.histIndex=-1;
       model.draftKey=draftKey;model.seq=restored?1:0;model.lastExportSeq=0;model.modified=restored;model.page=0;model.query='';model.termFilter='';model.filter='all';model.sort='default';
-      model.hist=[];model.histIndex=-1;model.analysisStale=true;model.safety=new Map();model.termFind=new Map();
       $('search').value='';$('termFilter').value='';$('filter').value='all';$('sort').value='default';$('fileName').textContent=file.name;
       refreshKitInfo();
       updateUndoButtons();
@@ -1540,6 +1547,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // ---------------------------------------------------------------------------
   function mk(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=text;return n;}
   function mkBtn(cls,text,onClick){const b=document.createElement('button');b.type='button';b.className=cls;b.textContent=text;if(onClick)b.addEventListener('click',onClick);return b;}
+  // Re-focus a translation box after a programmatic edit rebuilt the list, and
+  // put the caret at the end. Returns false when the box is no longer rendered.
+  function focusById(id){
+    const node=id?document.getElementById(id):null;if(!node)return false;
+    if(typeof node.focus==='function')node.focus();
+    try{if(typeof node.setSelectionRange==='function'&&typeof node.value==='string')node.setSelectionRange(node.value.length,node.value.length);}catch{}
+    return true;
+  }
   function metaOf(unitId){let m=model.meta.get(unitId);if(!m){m={status:'unmarked',note:''};model.meta.set(unitId,m);}return m;}
   function statusKey(st){return st==='proofread'?'statusProofread':st==='reviewed'?'statusReviewed':st==='flagged'?'statusFlagged':'statusUnmarked';}
   function segById(id){return model.byId.get(id);}

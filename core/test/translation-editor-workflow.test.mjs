@@ -60,6 +60,16 @@ function simpleMatch(el, sel) {
   return true;
 }
 function camel(s) { return s.replace(/-([a-z])/g, (_, c) => c.toUpperCase()); }
+function findByIdDeep(node, id) {
+  for (const c of node._children || []) {
+    if (c && c.nodeType === 1) {
+      if (c.id === id) return c;
+      const f = findByIdDeep(c, id);
+      if (f) return f;
+    }
+  }
+  return null;
+}
 
 function makeBoot({ confirmDefault = true } = {}) {
   const ids = elementIds(scriptBlocks().app);
@@ -101,19 +111,20 @@ function makeBoot({ confirmDefault = true } = {}) {
     removeEventListener(t, fn) { const a = this._listeners[t]; if (a) { const i = a.indexOf(fn); if (i >= 0) a.splice(i, 1); } }
     dispatchEvent(type, ev = {}) { const e = Object.assign({ type, target: this, preventDefault() {}, stopPropagation() {} }, ev); e.target = ev.target || this; for (const fn of this._listeners[type] || []) fn(e); return true; }
     click() { this.dispatchEvent('click'); }
-    focus() { document.activeElement = this; }
+    focus() { if (document.activeElement === this) return; document.activeElement = this; this.dispatchEvent('focus', { target: this }); }
     blur() { if (document.activeElement === this) document.activeElement = null; this.dispatchEvent('blur', { target: this }); }
     remove() { if (this.parentNode) this.parentNode._children = this.parentNode._children.filter((c) => c !== this); }
     querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
     querySelectorAll(sel) { const out = []; const walk = (n) => { for (const c of n._children) { if (c && c.nodeType === 1) { if (simpleMatch(c, sel)) out.push(c); walk(c); } } }; walk(this); return out; }
     scrollIntoView() {}
+    setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; }
   }
 
   const document = {
     documentElement: new El('html'),
     body: new El('body'),
     activeElement: null,
-    getElementById: (id) => byId.get(id) || null,
+    getElementById: (id) => byId.get(id) || findByIdDeep(document.documentElement, id) || findByIdDeep(document.body, id) || [...byId.values()].map((e) => findByIdDeep(e, id)).find(Boolean) || null,
     createElement: (t) => new El(t),
     createDocumentFragment: () => new El('fragment'),
     createTextNode: (t) => ({ nodeType: 3, textContent: String(t) }),
@@ -741,4 +752,89 @@ test('draft backup on the first open uses the incoming kit identity and sources'
   assert.equal(doc.identity.targetStorySha256, 'story-first');
   assert.equal(doc.projectId, key);
   assert.equal(doc.sources['1:0-10'], 'FIRST line.');
+});
+
+// ---------------------------------------------------------------------------
+// Fourth round: cross-kit state isolation and copy/replace focus behaviour.
+// ---------------------------------------------------------------------------
+
+test('switching kits clears project-scoped state; a restored draft loads the new kit data', async () => {
+  const boot = makeBoot();
+  const zipA = await buildKit(boot.JSZip, [segment(1, { protectedSource: 'AAA Robin.' })], manifest({ count: 1, extra: { targetStory: { sha256: 'story-A' } } }));
+  const zipB = await buildKit(boot.JSZip, [segment(1, { protectedSource: 'BBB Robin.' })], manifest({ count: 1, extra: { targetStory: { sha256: 'story-B' } } }));
+  const keyA = '1:0-10\u0001Robin';
+  await boot.loadKit(zipA, 'A.zip');
+  boot.app.model.ignoredTerms.add(keyA);
+  boot.app.model.recoveries.push({ translations: { '1:0-10': 'x' }, updatedAt: 1 });
+  assert.equal(boot.app.model.ignoredTerms.size, 1);
+  assert.equal(boot.app.model.recoveries.length, 1);
+
+  // switching to another kit with NO draft must clear project-scoped state
+  await boot.loadKit(zipB, 'B.zip');
+  assert.equal(boot.app.model.ignoredTerms.size, 0, 'A ignored terms must not leak into B');
+  assert.equal(boot.app.model.recoveries.length, 0, 'A recovery points must not leak into B');
+
+  // a restored draft brings the NEW kit's own ignored terms / translations
+  const keyB = 'v1:story-B:inv-1:1:1:0-10:1:0-10';
+  boot.seedDraft(keyB, { id: keyB, translations: { '1:0-10': 'B恢复' }, records: {}, ignoredTerms: [keyA], recoveries: [{ translations: {}, updatedAt: 2 }], updatedAt: Date.now() });
+  const p = boot.loadKit(zipB, 'B2.zip');
+  await sleep(300);
+  const btns = boot.el('modalActions').querySelectorAll('button');
+  assert.ok(btns.length >= 3, 'restore dialog shown');
+  btns[0].click(); // restore
+  await p;
+  assert.equal(boot.app.model.segments[0].translation, 'B恢复');
+  assert.equal(boot.app.model.ignoredTerms.has(keyA), true, 'restored draft keeps its own ignored term');
+  assert.equal(boot.app.model.recoveries.length, 1, 'restored draft keeps its own recovery points');
+});
+
+test('copy-one while editing keeps the edit, records once, and restores focus', async () => {
+  const boot = makeBoot();
+  await boot.loadKit(await buildKit(boot.JSZip, [segment(1, { protectedSource: 'Line one.' })]));
+  const model = boot.app.model;
+  const UI = boot.app.UI.zh;
+  const ta0 = boot.el('list').querySelectorAll('.translation')[0];
+  ta0.focus(); ta0.value = '正在输入'; ta0.dispatchEvent('input');
+  assert.equal(model.segments[0].translation, '正在输入');
+  ta0.blur(); // a browser blurs the field before the button click lands
+  assert.equal(model.hist.length, 1, 'the typing is recorded exactly once');
+
+  const copyBtn = boot.el('list').querySelectorAll('button').find((b) => b.textContent === UI.copyOne);
+  copyBtn.click();
+  assert.equal(model.segments[0].translation, 'Line one.', 'copy applied');
+  assert.equal(model.hist.length, 2, 'typing + copy are two distinct entries, no duplicate');
+  const focused = boot.document.activeElement;
+  assert.ok(focused && focused.className.includes('translation'), 'a translation box is focused again');
+  assert.equal(focused.value, 'Line one.');
+  assert.equal(focused.selectionStart, focused.value.length, 'caret is placed at the end');
+  focused.blur();
+  assert.equal(model.hist.length, 2, 'a later blur does not duplicate the copy');
+
+  boot.app.undo(); assert.equal(model.segments[0].translation, '正在输入');
+  boot.app.undo(); assert.equal(model.segments[0].translation, '');
+  boot.app.redo(); assert.equal(model.segments[0].translation, '正在输入');
+  boot.app.redo(); assert.equal(model.segments[0].translation, 'Line one.');
+});
+
+test('replace-keywords while editing restores focus and records once', async () => {
+  const boot = makeBoot();
+  await boot.loadKit(await buildKit(boot.JSZip, [segment(1, { protectedSource: 'You see Robin.' })]));
+  const model = boot.app.model;
+  const UI = boot.app.UI.zh;
+  boot.el('termSource').value = 'Robin'; boot.el('termTarget').value = '罗宾';
+  boot.el('termForm').dispatchEvent('submit', { preventDefault() {} });
+  const ta0 = boot.el('list').querySelectorAll('.translation')[0];
+  ta0.focus(); ta0.value = 'Robin！'; ta0.dispatchEvent('input');
+  ta0.blur();
+  assert.equal(model.hist.length, 1);
+  const btn = boot.el('list').querySelectorAll('button').find((b) => b.textContent === UI.replaceKeywords);
+  btn.click();
+  assert.equal(model.segments[0].translation, '罗宾！');
+  assert.equal(model.hist.length, 2);
+  const focused = boot.document.activeElement;
+  assert.ok(focused && focused.className.includes('translation'), 'focus restored after replace');
+  boot.app.undo();
+  assert.equal(model.segments[0].translation, 'Robin！');
+  boot.app.redo();
+  assert.equal(model.segments[0].translation, '罗宾！');
 });
