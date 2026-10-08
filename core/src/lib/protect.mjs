@@ -15,6 +15,7 @@
 import { compareStructures } from './protection-v3.mjs';
 import { CONTEXT_WRITING_MACROS } from './context-semantics.mjs';
 import { SOFT_MACROS } from './protection.mjs';
+import { contextDelimiterFindings } from './structure-tokens.mjs';
 
 const PLACEHOLDER_RE = /\u27e6\d+\u27e7/g;
 
@@ -130,7 +131,7 @@ function placeholderIntegrityRelaxed(source, translation, placeholders, omitted)
  * Full V2 entry check: placeholder integrity -> reversible restore -> V3
  * structural guard -> no-op guard.
  */
-export function verifyEntry({ protectedText, placeholders, translatedProtected, fromRaw, toRaw, allow = [] }) {
+export function verifyEntry({ protectedText, placeholders, translatedProtected, fromRaw, toRaw, allow = [], context = null }) {
   const findings = [];
   const omissions = derivePronounOmissions(fromRaw, toRaw);
   const pi = placeholderIntegrityRelaxed(protectedText, translatedProtected, placeholders, omissions);
@@ -142,6 +143,11 @@ export function verifyEntry({ protectedText, placeholders, translatedProtected, 
   if (typeof toRaw !== 'string' || toRaw.trim() === '') findings.push({ code: 'EMPTY_TRANSLATION', detail: '' });
   if (fromRaw === toRaw) findings.push({ code: 'NO_OP', detail: '' });
 
+  // The enclosing syntax must not be broken by the translation. JavaScript
+  // string literals are escaped before we get here; macro arguments and link
+  // labels have no escape syntax, so introducing their delimiter blocks.
+  findings.push(...contextDelimiterFindings(context, fromRaw, toRaw));
+
   let structural = { blocking: [], findings: [] };
   try { structural = compareStructures(fromRaw, toRaw, { allow, allowPronounOmission: omissions }); } catch (e) { findings.push({ code: 'V3_ERROR', detail: String(e && e.message) }); }
   for (const b of structural.blocking || []) findings.push({ code: `V3_${b.code}`, detail: b.detail });
@@ -151,11 +157,12 @@ export function verifyEntry({ protectedText, placeholders, translatedProtected, 
 }
 
 /** Raw-domain check for a pair with no protected placeholders. */
-export function verifyRawEntry({ fromRaw, toRaw, allow = [] }) {
+export function verifyRawEntry({ fromRaw, toRaw, allow = [], context = null }) {
   const findings = [];
   const omissions = derivePronounOmissions(fromRaw, toRaw);
   if (typeof toRaw !== 'string' || toRaw.trim() === '') findings.push({ code: 'EMPTY_TRANSLATION', detail: '' });
   if (fromRaw === toRaw) findings.push({ code: 'NO_OP', detail: '' });
+  findings.push(...contextDelimiterFindings(context, fromRaw, toRaw));
   let structural = { blocking: [] };
   try { structural = compareStructures(fromRaw, toRaw, { allow, allowPronounOmission: omissions }); } catch (e) { findings.push({ code: 'V3_ERROR', detail: String(e && e.message) }); }
   for (const b of structural.blocking || []) findings.push({ code: `V3_${b.code}`, detail: b.detail });

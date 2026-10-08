@@ -16,7 +16,7 @@
  * compiler. Findings carry stable codes so later work can whitelist or regress.
  */
 
-import { collectVariables as extractVariables } from './structure-tokens.mjs';
+import { collectVariables as extractVariables, collectTemplateHoles, stripQuotedText } from './structure-tokens.mjs';
 
 const HARD = 'hard';
 const STRUCTURAL = 'structural';
@@ -98,7 +98,6 @@ const MACRO_RE = /<{2}\s*(\/?)([A-Za-z_][A-Za-z0-9_-]*|=[-]?|-)([\s\S]*?)>{2}/g;
 const LINK_RE = /\[\[([\s\S]*?)\]\]/g;
 const HTML_TAG_RE = /<\/?([A-Za-z][A-Za-z0-9-]*)((?:\s+[^<>]*?)?)\/?>/g;
 const HTML_ATTR_RE = /([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>=`]+))/g;
-const TEMPLATE_HOLE_RE = /\$\{[^}]*\}/g;
 const PRINTF_RE = /%(?:\d+\$)?[sdif]/g;
 
 function multiset(list) {
@@ -126,9 +125,7 @@ function sameMultiset(a, b) {
 
 const norm = (s) => s.replace(/\s+/g, ' ').trim();
 
-function stripQuoted(text) {
-  return text.replace(/"([^"]*)"/g, '""').replace(/'([^']*)'/g, "''");
-}
+const stripQuoted = stripQuotedText;
 
 /**
  * Remove macro text before HTML analysis. Without this, `<<set x>>` looks like
@@ -180,7 +177,7 @@ function extractTemplateHoles(text) {
   // String literals inside a hole are display text and may legitimately be
   // translated; structural code changes are still detected because the
   // surrounding expression differs.
-  return (text.match(TEMPLATE_HOLE_RE) || []).map((s) => stripQuoted(s).replace(/\s+/g, ''));
+  return collectTemplateHoles(text);
 }
 
 function extractPrintf(text) {

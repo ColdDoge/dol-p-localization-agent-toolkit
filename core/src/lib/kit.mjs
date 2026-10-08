@@ -25,6 +25,7 @@ import crypto from 'node:crypto';
 import { createZip, readStoredEntry } from './zip.mjs';
 import { sourceFingerprint, structuralKey, protectedHash } from './structure-cache.mjs';
 import { restoreProtected, verifyEntry } from './protect.mjs';
+import { escapeForContext, JS_STRING_CONTEXTS } from './structure-tokens.mjs';
 
 export const KIT_SCHEMA_VERSION = '1.0.0';
 export const KIT_KIND = 'dol-p-localization-kit';
@@ -84,13 +85,20 @@ export function checkKitEntry(unit, entry) {
   if (d.sourceFingerprint && d.sourceFingerprint !== sourceFingerprint(unit)) return { status: 'rejected', reason: 'source-fingerprint-mismatch' };
   if (d.structuralFingerprint && d.structuralFingerprint !== structuralKey(unit)) return { status: 'rejected', reason: 'structural-fingerprint-mismatch' };
 
-  const toRaw = restoreProtected(raw, unit.placeholders);
+  // A unit whose span sits inside a JavaScript string literal must be escaped
+  // before it is spliced back into the story: the translator may use ordinary
+  // ASCII quotes, backslashes, newlines, backticks or `${` and the generated
+  // source stays valid. The escaped form is what gets stored, so re-verifying
+  // the state at build time sees exactly what the pack will contain.
+  const safe = JS_STRING_CONTEXTS.has(unit.context) ? escapeForContext(unit.context, raw) : raw;
+  const toRaw = restoreProtected(safe, unit.placeholders);
   const v = verifyEntry({
     protectedText: unit.protectedText, placeholders: unit.placeholders,
-    translatedProtected: raw, fromRaw: unit.rawText, toRaw,
+    translatedProtected: safe, fromRaw: unit.rawText, toRaw,
+    context: unit.context,
   });
   if (!v.ok) return { status: 'rejected', reason: 'qa-failed', codes: v.codes };
-  return { status: 'accepted', translatedProtected: raw, toRaw, allowPronounOmission: v.allowPronounOmission };
+  return { status: 'accepted', translatedProtected: safe, toRaw, allowPronounOmission: v.allowPronounOmission };
 }
 
 /** One kit segment for a unit. `translation` starts empty (to be filled). */

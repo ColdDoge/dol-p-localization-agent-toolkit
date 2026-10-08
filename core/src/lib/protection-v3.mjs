@@ -14,14 +14,12 @@
 import { extractMacros, extractLinkTargets, SOFT_MACROS } from './protection.mjs';
 import { CONDITIONAL_OPEN, CONDITIONAL_BRANCH, CONDITIONAL_CLOSE, BLOCK_MACROS_V3 } from './protection-v3-blocks.mjs';
 import { CONTEXT_WRITING_MACROS, equivalentSignatures, signatureOf } from './context-semantics.mjs';
-import { collectVariables } from './structure-tokens.mjs';
+import { collectVariables, collectTemplateHoles, stripQuotedText as stripQuoted } from './structure-tokens.mjs';
 
-const TEMPLATE_HOLE_RE = /\$\{[^}]*\}/g;
 const HTML_TAG_RE = /<\/?([A-Za-z][A-Za-z0-9-]*)((?:\s+[^<>]*?)?)\/?>/g;
 const SPLIT = ' \u0001 ';
 
 const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
-const stripQuoted = (s) => s.replace(/"([^"]*)"/g, '""').replace(/'([^']*)'/g, "''");
 const withoutMacros = (t) => String(t || '').replace(/<{2}[\s\S]*?>{2}/g, SPLIT);
 
 function multiset(list) {
@@ -42,9 +40,7 @@ function diffMultiset(a, b) {
   return { added, removed };
 }
 
-function collectHoles(text) {
-  return (String(text || '').match(TEMPLATE_HOLE_RE) || []).map((s) => stripQuoted(s).replace(/\s+/g, ''));
-}
+const collectHoles = collectTemplateHoles;
 function collectHtml(text) {
   const out = [];
   HTML_TAG_RE.lastIndex = 0;

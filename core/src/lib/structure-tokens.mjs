@@ -54,6 +54,40 @@ export function collectVariables(text) {
   return out;
 }
 
+/** Fold a quoted span to its delimiters, so only structure remains. */
+export function stripQuotedText(text) {
+  return String(text == null ? '' : text).replace(/"([^"]*)"/g, '""').replace(/'([^']*)'/g, "''");
+}
+
+/**
+ * `${ … }` template holes, whitespace-folded and quote-stripped.
+ *
+ * Escape-aware: an *escaped* hole (`\${ … }`, produced when a JS template
+ * string is escaped for a translation) is literal text, not an interpolation,
+ * so it must not be counted as a structure change.
+ */
+export function collectTemplateHoles(text) {
+  const s = String(text == null ? '' : text);
+  const out = [];
+  let i = 0;
+  while (i < s.length - 1) {
+    if (s[i] === '$' && s[i + 1] === '{') {
+      let backslashes = 0;
+      for (let k = i - 1; k >= 0 && s[k] === '\\'; k -= 1) backslashes += 1;
+      if (backslashes % 2 === 0) {
+        const close = s.indexOf('}', i + 2);
+        if (close > 0) {
+          out.push(stripQuotedText(s.slice(i, close + 1)).replace(/\s+/g, ''));
+          i = close + 1;
+          continue;
+        }
+      }
+    }
+    i += 1;
+  }
+  return out;
+}
+
 /**
  * Read a JS-ish string literal starting at `i` (`"`, `'` or `` ` ``).
  * Returns `{ start, end, quote, innerStart, innerEnd }` or null when `i` is
@@ -172,6 +206,219 @@ export function isStructuralLabel(text) {
 }
 
 /**
+ * Prose test for *labels* (link labels, macro label arguments). Labels are
+ * known display positions, so a short word ("No", "Yes", "Buy", "Pay",
+ * "Yes (0:05)") is text a translator should see. Identifier shapes, URLs and
+ * paths are still rejected by {@link isStructuralLabel} / {@link isUrlLike}
+ * before this is consulted; `hasLatinWord` only asks "is there anything to
+ * translate at all".
+ */
+export function hasLatinWord(text, min = 2) {
+  return new RegExp(`[A-Za-z]{${min},}`).test(String(text == null ? '' : text));
+}
+
+/** True when `text` is a translatable label: prose-ish, not a name or a URL. */
+export function isTranslatableLabelText(text) {
+  const s = String(text == null ? '' : text);
+  if (isUrlLike(s)) return false;
+  if (isStructuralLabel(s)) return false;
+  return hasLatinWord(s);
+}
+
+/**
+ * Stricter test for a *bare string argument* in a macro body (no display key,
+ * no embedded markup). Such a literal is much more likely to be data than
+ * prose, so require a fuller sentence signal: a sentence ending, three or more
+ * words, or a capitalised phrase. "silver fox", "dark blue" and "input change"
+ * stay out; "Genital sensitivity", "Keep it away with your cheeks" and
+ * "P-please, Sydney," are kept.
+ */
+export function looksLikeDisplayArgument(inner) {
+  const t = String(inner == null ? '' : inner).trim();
+  if (!looksLikeProseText(t)) return false;
+  if (/[.!?…]["')\]]*$/.test(t)) return true;
+  if (t.split(/\s+/).filter(Boolean).length >= 3) return true;
+  return /^[0-9£$]?[A-Z]/.test(t);
+}
+
+const LINK_MARKUP_RE = /\[\[([\s\S]*?)\]\]/g;
+
+/**
+ * Link markup inside an arbitrary range (a macro body is not a separate
+ * element, so `[[Label|Target]]` inside `<<link …>>` would otherwise never be
+ * seen). Returns `{ start, end, text }` for the *label* span of every link
+ * that has a separate target. A link whose label doubles as its target is
+ * skipped: the game looks that string up, so it must not be translated.
+ */
+export function collectLinkLabels(text, from = 0, to = text.length) {
+  const out = [];
+  LINK_MARKUP_RE.lastIndex = from;
+  let m;
+  while ((m = LINK_MARKUP_RE.exec(text)) !== null) {
+    if (m.index >= to) break;
+    if (m.index + m[0].length > to) break;
+    const inner = m[1];
+    // Skip JS array-of-arrays literals, which look like link markup.
+    if (/\],\s*\[/.test(inner)) continue;
+    let label = inner;
+    const pipe = inner.indexOf('|');
+    if (pipe >= 0) label = inner.slice(0, pipe);
+    else if (inner.includes('->')) label = inner.slice(0, inner.indexOf('->'));
+    else if (inner.includes('<-')) label = inner.slice(inner.indexOf('<-') + 2);
+    else {
+      const bracket = inner.indexOf('][');
+      if (bracket >= 0) label = inner.slice(0, bracket);
+      else continue; // target doubles as display; cannot localize safely
+    }
+    const start = m.index + 2;
+    // A label may itself be a quoted/template literal (`[[\`Show <<him>>\`|X]]`).
+    // Then the delimiters are syntax and only the inner text is displayed.
+    const lit = readStringLiteral(label, 0);
+    if (lit && lit.end === label.length && label.length >= 2) {
+      out.push({ start: start + lit.innerStart, end: start + lit.innerEnd, text: label.slice(lit.innerStart, lit.innerEnd), quote: lit.quote });
+    } else {
+      out.push({ start, end: start + label.length, text: label, quote: null });
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Enclosing-context safety
+//
+// A translatable span is not free-floating: it sits inside a JavaScript string
+// literal, a quoted macro argument, or link markup. What is harmless in one
+// context destroys the code in another — a `"` inside `"...<unit>..."` closes
+// the JS string, a `|` inside `[[<unit>|Target]]` moves the link target.
+//
+// Two mechanisms, chosen by what the surrounding syntax can absorb:
+//
+//   javascript string literals  → ESCAPE the translation (`"` → `\"`), so a
+//                                 translator may use ordinary ASCII quotes,
+//                                 backslashes, newlines, backticks and `${`
+//   SugarCube macro arguments,  → REJECT a delimiter the translation
+//   link labels                   introduces (SugarCube has no escape syntax
+//                                 we can rely on)
+//
+// Neither mechanism bans ordinary Chinese punctuation: full-width quotes and
+// brackets are always free.
+// ---------------------------------------------------------------------------
+
+/** `context` → the delimiter that encloses the unit's span in the source. */
+export const JS_STRING_CONTEXTS = new Map([
+  ['js-double', '"'],
+  ['js-single', "'"],
+  ['js-template', '`'],
+]);
+
+/** `context` → the delimiter of the quoted macro argument that holds the unit. */
+export const MACRO_ARG_CONTEXTS = new Map([
+  ['arg-double', '"'],
+  ['arg-single', "'"],
+]);
+
+/** Context label for a link label, i.e. the text inside `[[ … |Target]]`. */
+export const LINK_LABEL_CONTEXT = 'link';
+
+/** Context of a code string extracted from a JS literal with this delimiter. */
+export function jsStringContext(quote) {
+  if (quote === '"') return 'js-double';
+  if (quote === "'") return 'js-single';
+  if (quote === '`') return 'js-template';
+  return null;
+}
+
+/** Context of a label taken from a quoted macro argument. */
+export function macroArgContext(quote) {
+  if (quote === '"') return 'arg-double';
+  if (quote === "'") return 'arg-single';
+  return null;
+}
+
+/**
+ * Make `text` safe to place inside the unit's enclosing context by escaping
+ * what the surrounding syntax would otherwise interpret.
+ *
+ * Only JavaScript string literals are escapable; for macro arguments and link
+ * labels the guard is {@link contextDelimiterFindings} instead.
+ */
+export function escapeForContext(context, text) {
+  const quote = JS_STRING_CONTEXTS.get(context);
+  if (!quote) return String(text == null ? '' : text);
+  const isTemplate = quote === '`';
+  let out = '';
+  const s = String(text);
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s[i];
+    if (c === '\\') { out += '\\\\'; continue; }
+    if (c === quote) { out += `\\${c}`; continue; }
+    // `\$` is an identity escape in every JavaScript string flavour, so `${`
+    // stays literal text in a plain string too — and the guard no longer reads
+    // it as a template interpolation the translation "added".
+    if (c === '$' && s[i + 1] === '{') { out += '\\$'; continue; }
+    if (!isTemplate && c === '\n') { out += '\\n'; continue; }
+    if (!isTemplate && c === '\r') { out += '\\r'; continue; }
+    out += c;
+  }
+  return out;
+}
+
+const countOf = (haystack, needle) => haystack.split(needle).length - 1;
+
+/**
+ * Findings for delimiters a translation must not introduce in its enclosing
+ * context. Returns `{ code, detail }` records (empty when the translation adds
+ * nothing dangerous). Sequences already present in the source are exempt:
+ * only *new* structure breaks the code.
+ */
+export function contextDelimiterFindings(context, fromRaw, toRaw, quote = null) {
+  const from = String(fromRaw == null ? '' : fromRaw);
+  const to = String(toRaw == null ? '' : toRaw);
+  const introduced = (needle) => countOf(to, needle) > countOf(from, needle);
+
+  if (context == null) {
+    // Free text has no delimiter to escape, but an odd number of backticks in
+    // SugarCube markup opens a template literal that swallows what follows.
+    const ticks = countOf(to, '`');
+    if (ticks % 2 === 1) {
+      return [{
+        code: 'TEXT_BACKTICK_UNBALANCED',
+        detail: 'translation introduces an unpaired "`" into passage markup',
+      }];
+    }
+    return [];
+  }
+
+  if (JS_STRING_CONTEXTS.has(context)) return []; // escaping handles this
+
+  if (MACRO_ARG_CONTEXTS.has(context)) {
+    const delim = MACRO_ARG_CONTEXTS.get(context);
+    if (introduced(delim)) {
+      return [{
+        code: 'MACRO_ARG_DELIMITER_INSERTED',
+        detail: `translation introduces ${JSON.stringify(delim)} inside a ${delim}-quoted macro argument; use full-width quotes instead`,
+      }];
+    }
+    if (introduced('>>')) {
+      return [{ code: 'MACRO_ARG_DELIMITER_INSERTED', detail: 'translation introduces ">>" inside a macro argument' }];
+    }
+    return [];
+  }
+
+  if (context === LINK_LABEL_CONTEXT) {
+    for (const needle of ['|', ']]', '->', '<-', '][', '`']) {
+      if (introduced(needle)) {
+        return [{
+          code: 'LINK_LABEL_DELIMITER_INSERTED',
+          detail: `translation introduces ${JSON.stringify(needle)} inside a link label`,
+        }];
+      }
+    }
+  }
+  return [];
+}
+
+/**
  * Object property keys whose string value is player-facing prose assembled by
  * the story itself. DoL builds almost every "assembled message" this way
  * (`{ start, joiner, end, color }` lists and `{ sentence, dialogueID }`
@@ -224,7 +471,9 @@ export function looksLikeProseText(inner) {
   if (lowerish && words.length >= 3) return false;
   if (lowerish && words.some((w) => /[-_]/.test(w))) return false;
   if (words.length >= 2) return true;
-  return /[.!?…:]["')\]]*$/.test(t) && /[A-Za-z]{2,}/.test(t);
+  // A single word counts only as a finished sentence ("Locked.", "Yes!").
+  // A trailing ":" is plumbing (`aspect-ratio:`), not prose.
+  return /[.!?…]["')\]]*$/.test(t) && /[A-Za-z]{2,}/.test(t);
 }
 
 /**
@@ -287,6 +536,7 @@ export function extractDisplayStrings(text, from = 0, to = text.length) {
           innerStart: lit.innerStart,
           innerEnd: lit.innerEnd,
           inner,
+          quote: lit.quote,
           hasMarkup: /<{2}|<[A-Za-z/]/.test(inner),
           hasEscape: /\\/.test(inner),
         });

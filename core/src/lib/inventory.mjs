@@ -14,13 +14,20 @@ import {
   isFlushMacro, isBlockHtml, LABEL_ARG_MACROS, CODE_BODY_MACROS, OUTPUT_MACROS,
 } from './elements.mjs';
 import {
-  isUrlLike, isStructuralLabel, extractDisplayStrings, DISPLAY_STRING_KEYS,
+  isUrlLike, isStructuralLabel, isTranslatableLabelText, hasLatinWord,
+  looksLikeProseText, looksLikeDisplayArgument, extractDisplayStrings, collectLinkLabels, DISPLAY_STRING_KEYS,
+  jsStringContext, macroArgContext, LINK_LABEL_CONTEXT,
 } from './structure-tokens.mjs';
+import { collectIdentifierSpace } from './identifier-space.mjs';
 
 export function looksLikeEnglish(text) {
-  if (!/[A-Za-z]{3,}/.test(text)) return false;
-  if (/[A-Za-z]{2,}[ \t][A-Za-z]{2,}/.test(text)) return true;
-  return /\b[A-Za-z]{4,}\b/.test(text);
+  // "Is there anything to translate here?" — deliberately just the presence of
+  // Latin words, with a two-letter floor. The old length heuristic dropped
+  // legitimate short text ("Go", "No", "Yes", "Buy", "Opt.", "fur", "You ")
+  // while adding no code safety: what keeps code out of the kit is the element
+  // model (structure becomes placeholders), the enclosing-context rules and the
+  // residual-structure check, not a word-length test.
+  return /[A-Za-z]{2,}/.test(String(text == null ? '' : text));
 }
 
 export function normalizeWhitespace(text) {
@@ -36,6 +43,53 @@ export function normalizeWhitespace(text) {
  */
 const RESIDUAL_STRUCTURE_RE = /<{2}|>{2}|\[\[|\]\]|<[A-Za-z/]|(?<![\p{L}\p{N}_$])[$_][A-Za-z_]/u;
 
+/** Macros whose body is a decision, not a message. */
+const CONTROL_BODY_MACROS = new Set([
+  'if', 'elseif', 'else', 'unless', 'case', 'switch', 'while', 'for',
+  'default', 'break', 'return', 'continue',
+]);
+
+/** Macros whose quoted argument names something the game looks up. */
+const IDENT_ARG_MACROS = new Set([
+  'goto', 'display', 'include', 'widget', 'npc', 'npcappend', 'npcselect',
+  'npcincr', 'unset', 'pass', 'image', 'audio', 'addinlineevent', 'storeon',
+  'earnfeat', 'wearprop', 'add_link',
+]);
+
+/** Characters that mark a literal as code/plumbing rather than prose. */
+const CODEISH_LITERAL_RE = /[=[\]{}<>+]/;
+
+/**
+ * A literal that *starts* with a variable, a CSS selector or an id is code
+ * (`$estate.x gte 10`, `.wardrobe-action a`, `_x`). The same characters inside
+ * a sentence are placeholders: "The _creatureType slowly approaches …" is display
+ * text whose variables the unit machinery protects.
+ */
+const CODE_START_RE = /^\s*[$_.#"']/;
+
+/**
+ * CSS/SVG function values (`hue-rotate(30deg) saturate(0.2)`, `rgb(1,2,3)`).
+ * Parentheses alone are *not* a code signal — "Compact (24-Hour)",
+ * "Hands (gloves)" and "… requirements for the engine (ES2020)" are display text.
+ */
+const CSS_FUNCTION_RE = /\b[a-z-]+\([^)]*(?:deg|px|em|rem|%|rgba?|hsla?|url|calc)\b/i;
+
+/**
+ * "Compact (24-Hour)", "Beech Street (Shopping centre)", "Try to talk to them
+ * (0:20)": a label with a parenthetical. Parentheses are allowed only in this
+ * shape, so an expression like `(V.x.includes("y") ? "a" : "b")` stays out.
+ */
+const PAREN_LABEL_RE = /^[-+0-9A-Za-z£$][^()?=$_,]*\([^()?=$_,]*\)[.!?…]?$/;
+
+/**
+ * Assignment targets that describe content rather than plumbing. A map
+ * assigned to `setup.endingReasonText`, `setup.incidentDescs`, `setup.actorName`
+ * holds player-facing strings under ids of its own, so the keys cannot be
+ * allowlisted one by one; the *target name* is the durable signal.
+ */
+const DISPLAY_TARGET_RE = /(text|texts|string|strings|str|desc|descs|description|label|labels|message|messages|caption|title|journal|hint|prompt|note|reason|name)/i;
+const ASSIGN_TARGET_RE = /^\s*(?:set|unset|run|capture|init|remember|forget)\s+([A-Za-z_$][\w$.[\]"']*)\s+(?:to|\+=|-=|=)\s*/;
+
 const UI_HINTS = /(setting|option|menu|save|load|slot|panel|button|hud|footer|version|import|export|config)/i;
 const WIDGET_HINT = /widget/i;
 const NARRATIVE_HINT = /^(loc-|overworld|special-|story|passage)/i;
@@ -45,12 +99,7 @@ const NARRATIVE_HINT = /^(loc-|overworld|special-|story|passage)/i;
  * link targets and identifier-shaped arguments (`$var`, `_var.path`,
  * `_filters.type.normal`) are structure the game looks up, not text.
  */
-export function isTranslatableLabel(text) {
-  const s = String(text == null ? '' : text);
-  if (isUrlLike(s)) return false;
-  if (isStructuralLabel(s)) return false;
-  return looksLikeEnglish(s);
-}
+export const isTranslatableLabel = isTranslatableLabelText;
 
 export function classifyArea(passage) {
   const n = passage.name;
@@ -156,6 +205,10 @@ export function buildInventory(story, { sourceVersion = 'unknown' } = {}) {
     pendingIssues: 0,
   };
   const reversibleErrors = [];
+  // Strings the code uses as lookup keys: a data literal that happens to equal
+  // one of them must not be translated, or the lookup copy would no longer
+  // match the display copy.
+  const identifierSpace = collectIdentifierSpace(story);
 
   const EMPTY_HITS = [];
   const issueGroups = new Map();
@@ -188,7 +241,13 @@ export function buildInventory(story, { sourceVersion = 'unknown' } = {}) {
       // A unit must carry text a translator can actually work on. Structure
       // alone (`<span class='ui-icon'></span>`, `<<iconUi _file>>`) is not a
       // translation unit; exporting it would only manufacture NO_OP blockers.
-      if (!looksLikeEnglish(englishPayload(protectedText, placeholders))) return;
+      //
+      // Labels are known display positions, so a short word ("No", "Yes",
+      // "Buy", "Pay", "Yes (0:05)") counts; free text keeps the stricter
+      // sentence heuristic that protects identifier-shaped payloads.
+      const payload = englishPayload(protectedText, placeholders);
+      const isLabel = kind === 'link_label' || kind === 'macro_label';
+      if (!(isLabel ? hasLatinWord(payload) : looksLikeEnglish(payload))) return;
       // Two generators must never claim the same span: a duplicate unitId would
       // be silently collapsed by the kit's jsonl/CSV merge, losing one unit.
       const unitId = `${p.pid}:${start}-${end}`;
@@ -214,6 +273,7 @@ export function buildInventory(story, { sourceVersion = 'unknown' } = {}) {
         riskLevel,
         kind,
         origin: extra.origin ?? null,
+        context: extra.context ?? null,
         sourceVersion,
         baseRelation: extra.baseRelation ?? null,
         oldTranslation: null,
@@ -261,9 +321,10 @@ export function buildInventory(story, { sourceVersion = 'unknown' } = {}) {
       //   code bodies (<<set>>, <<run>>,   prose literals with an embedded
       //     <<script>> blocks, …)          macro / HTML tag, plus values of a
       //                                    display key (`sentence`, `start`, …)
-      //   any other macro                  the same "embedded markup" rule;
-      //                                    a bare name argument can never be
-      //                                    display text
+      //                                    or of a display-named map target
+      //   any other macro                  prose with embedded markup, or a
+      //                                    sentence-shaped argument that is
+      //                                    neither a decision nor a lookup key
       //
       // Everything else stays out of the kit. Prose that we deliberately do
       // not export is recorded as a pending issue, never dropped silently.
@@ -280,20 +341,63 @@ export function buildInventory(story, { sourceVersion = 'unknown' } = {}) {
       const prose = (isCode || isOpenMacro)
         ? extractDisplayStrings(p.content, el.bodyStart, el.bodyEnd)
         : EMPTY_HITS;
-      const hits = [];
       let labelSpan = null;
       if (isOpenMacro && LABEL_ARG_MACROS.has(el.name)) {
         const lbl = macroLabel(el);
         if (lbl) labelSpan = { start: lbl.start, end: lbl.end };
       }
+
+      // Link markup inside a macro body: `<<link [[Label|Target]]>>`,
+      // `<<button [[Label|Target]]>>`, `<<fadetext [[…]]>>`. The label is
+      // display text, the target is an identifier, and neither is visible to
+      // the run scanner because the whole macro is one protected element.
+      const linkLabels = isOpenMacro
+        ? collectLinkLabels(p.content, el.bodyStart, el.bodyEnd).filter((l) => isTranslatableLabel(l.text))
+        : EMPTY_HITS;
+
+      // A label span (macro argument or link label) already owns the text it
+      // contains; the prose scan must not emit a second, overlapping unit.
+      const claimed = linkLabels.map((l) => ({ start: l.start, end: l.end }));
+      if (labelSpan) claimed.push(labelSpan);
+
+      // `<<set setup.endingReasonText = { id: "…" }>>`: a map assigned to a
+      // display-named target holds player-facing strings under its own keys.
+      const assignTarget = isOpenMacro || isCode
+        ? ASSIGN_TARGET_RE.exec(p.content.slice(el.bodyStart, el.bodyEnd))
+        : null;
+      const displayTarget = Boolean(assignTarget && DISPLAY_TARGET_RE.test(assignTarget[1]));
+
+      const hits = [];
       for (const hit of prose) {
-        // A label macro's first argument is exported by `macro_label`; compare
-        // on the literal's inner span (the label span excludes the quotes).
-        if (labelSpan && hit.innerStart >= labelSpan.start && hit.innerEnd <= labelSpan.end) continue;
+        if (claimed.some((s) => hit.innerStart >= s.start && hit.innerEnd <= s.end)) continue;
         const keyed = hit.key !== null;
-        const exportable = (!keyed && !loose && !hit.hasMarkup)
-          ? false                                    // bare name argument
-          : keyed && !DISPLAY_STRING_KEYS.has(hit.key) ? false : true;
+        let exportable;
+        const codeShaped = CODEISH_LITERAL_RE.test(hit.inner)
+          || CODE_START_RE.test(hit.inner)
+          || CSS_FUNCTION_RE.test(hit.inner)
+          || (/[()]/.test(hit.inner) && !PAREN_LABEL_RE.test(hit.inner.trim()));
+        const notAnIdentifier = !identifierSpace.has(hit.inner.trim().toLowerCase());
+        if (keyed) {
+          exportable = DISPLAY_STRING_KEYS.has(hit.key)
+            || (displayTarget
+              && looksLikeDisplayArgument(hit.inner)
+              && !codeShaped
+              && notAnIdentifier);
+        } else if (loose) {
+          exportable = true;                         // <<print>> shows the argument
+        } else if (hit.hasMarkup) {
+          exportable = true;                         // a rendered template
+        } else {
+          // A bare string argument. It is display text only when nothing says
+          // otherwise: not a decision, not a name the code looks up, and not
+          // code-shaped plumbing (CSS values, log messages, expressions).
+          const hostName = el.name || '';
+          exportable = looksLikeDisplayArgument(hit.inner)
+            && !CONTROL_BODY_MACROS.has(hostName)
+            && !IDENT_ARG_MACROS.has(hostName)
+            && !codeShaped
+            && notAnIdentifier;
+        }
         if (!exportable) {
           recordIssue('unexported-code-string', p.name, hit.innerStart,
             JSON.stringify(hit.inner.slice(0, 80)), `${el.name || el.kind}${keyed ? `:${hit.key}` : ''}`);
@@ -302,6 +406,7 @@ export function buildInventory(story, { sourceVersion = 'unknown' } = {}) {
         hits.push(hit);
       }
       if (hits.length > 0) boundary = true;
+      if (linkLabels.length > 0) boundary = true;
 
       if (boundary) {
         flush();
@@ -324,9 +429,29 @@ export function buildInventory(story, { sourceVersion = 'unknown' } = {}) {
               JSON.stringify(payload.slice(0, 80)), el.name || el.kind);
             continue;
           }
+          // A data literal whose exact value is also a lookup key stays out of
+          // the kit; see `identifier-space.mjs`.
+          if (identifierSpace.has(raw.trim().toLowerCase())) {
+            recordIssue('code-string-is-identifier', p.name, hit.innerStart,
+              JSON.stringify(raw.slice(0, 60)), el.name || el.kind);
+            continue;
+          }
           const risk = d > 0 ? 'L2' : placeholders.length > 0 ? 'L1' : 'L0';
-          pushUnit('passage_text', hit.innerStart, hit.innerEnd, raw, protectedText, placeholders, risk, { origin: 'code-string' });
+          pushUnit('passage_text', hit.innerStart, hit.innerEnd, raw, protectedText, placeholders, risk, {
+            origin: 'code-string',
+            context: jsStringContext(hit.quote),
+          });
           stats.codeStrings += 1;
+        }
+        for (const label of linkLabels) {
+          const inner = literalElements(label.text);
+          const { protectedText, placeholders } = isReversible(label.text, inner)
+            ? placeholdersOf(inner)
+            : { protectedText: label.text, placeholders: [] };
+          pushUnit('link_label', label.start, label.end, label.text, protectedText, placeholders, d > 0 ? 'L2' : 'L1', {
+            origin: 'macro-link-label',
+            context: label.quote ? jsStringContext(label.quote) : LINK_LABEL_CONTEXT,
+          });
         }
         if (el.kind === 'link') {
           const label = linkLabel(el);
@@ -335,7 +460,10 @@ export function buildInventory(story, { sourceVersion = 'unknown' } = {}) {
             const { protectedText, placeholders } = isReversible(label.text, inner)
               ? placeholdersOf(inner)
               : { protectedText: label.text, placeholders: [] };
-            pushUnit('link_label', label.start, label.end, label.text, protectedText, placeholders, d > 0 ? 'L2' : 'L1');
+            pushUnit('link_label', label.start, label.end, label.text, protectedText, placeholders, d > 0 ? 'L2' : 'L1', {
+              origin: 'link-markup',
+              context: LINK_LABEL_CONTEXT,
+            });
           }
         } else if (el.kind === 'macro' && LABEL_ARG_MACROS.has(el.name)) {
           const label = macroLabel(el);
@@ -344,7 +472,10 @@ export function buildInventory(story, { sourceVersion = 'unknown' } = {}) {
             const { protectedText, placeholders } = isReversible(label.text, inner)
               ? placeholdersOf(inner)
               : { protectedText: label.text, placeholders: [] };
-            pushUnit('macro_label', label.start, label.end, label.text, protectedText, placeholders, d > 0 ? 'L2' : 'L1');
+            pushUnit('macro_label', label.start, label.end, label.text, protectedText, placeholders, d > 0 ? 'L2' : 'L1', {
+              origin: 'macro-label',
+              context: macroArgContext(label.quote),
+            });
           }
         }
         continue;

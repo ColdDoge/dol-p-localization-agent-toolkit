@@ -22,15 +22,27 @@ Every non-text element of a payload run becomes `⟦n⟧`:
 | region | policy |
 | --- | --- |
 | markup runs | exported; non-text elements become placeholders |
-| `<<script>> … <</script>>` | never exported as text |
-| `<<set>>` / `<<run>>` / `<<capture>>` / `<<init>>` bodies | only display-keyed values and prose strings carrying embedded markup |
+| `<<script>> … <</script>>` | never exported as text (the closing marker may appear inside a script string) |
+| `<<set>>` / `<<run>>` / `<<capture>>` / `<<init>>` bodies | display-keyed values; prose strings carrying embedded markup; and full sentences / capitalised phrases that are not lookup keys |
 | `<<print>>` / `<<=>>` / `<<->>` bodies | every prose literal (the argument is shown) |
-| other macro bodies | only prose literals carrying embedded markup |
+| other macro bodies | prose literals carrying embedded markup, or display-shaped arguments on macros that are neither decisions nor name-taking |
+| `<<link [[Label\|Target]]>>` and friends | the label becomes a `link_label` unit; the target stays protected |
 | link labels / macro labels | only prose; URLs, targets and identifier-shaped arguments are excluded |
 
 Every prose literal the policy skips is recorded as a pending issue
-(`code-string-unparsed`, `unexported-code-string`, `duplicate-unit-span`, …) so
-the decision is visible instead of silent.
+(`code-string-unparsed`, `code-string-is-identifier`,
+`unexported-code-string`, `duplicate-unit-span`, …) so the decision is visible
+instead of silent. Strings the code uses as keys are tracked in
+`identifier-space.mjs` and are never exported as data literals.
+
+## Enclosing contexts and their remedies
+
+| context | remedy for a dangerous character |
+| --- | --- |
+| `js-double` / `js-single` / `js-template` | escaped (`\"`, `\\`, `\n`, `\``, `\${`) — the translation may use ordinary punctuation |
+| `arg-double` / `arg-single` | refused (`MACRO_ARG_DELIMITER_INSERTED`) |
+| `link` | refused (`LINK_LABEL_DELIMITER_INSERTED` for `|`, `]]`, `->`, `<-`, `][`, `` ` ``) |
+| free text | refused only for unpaired backticks (`TEXT_BACKTICK_UNBALANCED`) |
 
 ## V3 token classes
 

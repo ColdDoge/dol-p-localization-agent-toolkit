@@ -71,9 +71,10 @@ export function verifyRecord(unit, record) {
       translatedProtected: record.protectedTranslation,
       fromRaw: unit.rawText,
       toRaw: record.translation,
+      context: unit.context ?? null,
     });
   }
-  return verifyRawEntry({ fromRaw: unit.rawText, toRaw: record.translation });
+  return verifyRawEntry({ fromRaw: unit.rawText, toRaw: record.translation, context: unit.context ?? null });
 }
 
 /**

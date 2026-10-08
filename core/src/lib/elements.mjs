@@ -89,10 +89,13 @@ export function isBlockHtml(raw) {
 const MACRO_CODE = FLUSH_MACROS;
 
 const ENTITY_RE = /^&(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#[xX][0-9a-fA-F]+);/;
-const SCRIPT_CLOSE_RE = /<{2}\s*(?:\/\s*script|endscript)\s*>{2}/gi;
+const SCRIPT_CLOSE_RE = /^<{2}\s*(?:\/\s*script|endscript)\s*>{2}/i;
 
 function macroNameOf(raw) {
-  return (raw.slice(2, -2).trim().split(/[\s(]/)[0] || '').toLowerCase();
+  // Stop at the first argument delimiter. `<<print[`a`,`b`][0]>>` is a real
+  // DoL idiom: without `[` here the name would be derived from the *argument
+  // text*, which changes under translation and confuses every macro lookup.
+  return (raw.slice(2, -2).trim().split(/[\s([{]/)[0] || '').toLowerCase();
 }
 
 function classify(raw) {
@@ -105,11 +108,44 @@ function classify(raw) {
   return 'text';
 }
 
-/** End of the `<<script>>` block whose header ends at `openEnd`, or -1. */
+/**
+ * End of the `<<script>>` block whose header ends at `openEnd`, or null.
+ *
+ * Quote- and comment-aware: a script body may legitimately *talk about* the
+ * closing marker (`const s = "<</script>>";`), and a naive search would cut
+ * the block there and spill the rest of the JavaScript into translatable text.
+ */
 function scriptBlockEnd(content, openEnd) {
-  SCRIPT_CLOSE_RE.lastIndex = openEnd;
-  const m = SCRIPT_CLOSE_RE.exec(content);
-  return m ? { closeStart: m.index, closeEnd: m.index + m[0].length } : null;
+  let i = openEnd;
+  while (i < content.length) {
+    const c = content[i];
+    if (c === '"' || c === "'" || c === '`') {
+      const q = c;
+      i += 1;
+      while (i < content.length) {
+        if (content[i] === '\\') { i += 2; continue; }
+        if (content[i] === q) { i += 1; break; }
+        i += 1;
+      }
+      continue;
+    }
+    if (c === '/' && content[i + 1] === '/') {
+      const nl = content.indexOf('\n', i);
+      i = nl < 0 ? content.length : nl + 1;
+      continue;
+    }
+    if (c === '/' && content[i + 1] === '*') {
+      const close = content.indexOf('*/', i + 2);
+      i = close < 0 ? content.length : close + 2;
+      continue;
+    }
+    if (c === '<' && content[i + 1] === '<') {
+      const m = SCRIPT_CLOSE_RE.exec(content.slice(i, i + 24));
+      if (m) return { closeStart: i, closeEnd: i + m[0].length };
+    }
+    i += 1;
+  }
+  return null;
 }
 
 /** End of a `${ ... }` template hole starting at `i` (at `$`), or -1. */
@@ -319,9 +355,10 @@ export function macroLabel(el) {
   const q = /^\s*(?:"([^"]*)"|'([^']*)')/.exec(body.slice(nameLen));
   if (!q) return undefined;
   const label = q[1] !== undefined ? q[1] : q[2];
+  const quote = q[1] !== undefined ? '"' : "'";
   const offsetInBody = nameLen + q[0].length - label.length - 1;
   const start = el.start + 2 + offsetInBody;
-  return { outerStart: el.start, outerEnd: el.end, start, end: start + label.length, text: label };
+  return { outerStart: el.start, outerEnd: el.end, start, end: start + label.length, text: label, quote };
 }
 
 export { MACRO_CODE };

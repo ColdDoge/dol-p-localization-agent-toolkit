@@ -20,8 +20,15 @@ visibility         player-facing by default
 riskLevel          L0..L2 (conditional depth / placeholder presence)
 kind               passage_text | link_label | macro_label
 origin             null | "code-string" (a string lifted out of a code region)
+context            null | "js-double" | "js-single" | "js-template"
+                   | "arg-double" | "arg-single" | "link"
 sourceVersion      the recorded source version
 ```
+
+`context` names the syntax the span sits inside, which decides how the import
+protects it: JavaScript string literals are escaped, macro arguments and link
+labels refuse the delimiter they cannot absorb, and free text refuses only an
+unpaired backtick.
 
 Risk levels: `L0` plain text, `L1` contains a placeholder, `L2` nested in a
 conditional. Classification uses a source-language heuristic to decide which
