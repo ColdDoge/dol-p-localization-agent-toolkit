@@ -70,6 +70,11 @@ function findByIdDeep(node, id) {
   }
   return null;
 }
+function containsNode(root, node) {
+  if (root === node) return true;
+  for (const c of root._children || []) if (c && c.nodeType === 1 && containsNode(c, node)) return true;
+  return false;
+}
 
 function makeBoot({ confirmDefault = true } = {}) {
   const ids = elementIds(scriptBlocks().app);
@@ -214,6 +219,20 @@ function makeBoot({ confirmDefault = true } = {}) {
     seedDraft(key, record) {
       if (!stores.has('drafts')) stores.set('drafts', new Map());
       stores.get('drafts').set(key, record);
+    },
+    isConnected(node) {
+      const roots = [document.documentElement, document.body, ...byId.values()];
+      return roots.some((r) => containsNode(r, node));
+    },
+    // Faithful Chromium pointer order: moving the pointer to the button blurs
+    // the focused field first, and the click event only reaches the button if
+    // it is still connected afterwards (a synchronous rebuild detaches it).
+    pressClick(node) {
+      const ae = document.activeElement;
+      if (ae && ae !== node && typeof ae.blur === 'function') ae.blur();
+      if (!this.isConnected(node)) return false;
+      node.dispatchEvent('click');
+      return true;
     },
   };
 }
@@ -837,4 +856,84 @@ test('replace-keywords while editing restores focus and records once', async () 
   assert.equal(model.segments[0].translation, 'Robin！');
   boot.app.redo();
   assert.equal(model.segments[0].translation, '罗宾！');
+});
+
+// ---------------------------------------------------------------------------
+// Fifth round: real pointer order (mousedown -> blur -> click) must not swallow
+// the first click on an in-item control.
+// ---------------------------------------------------------------------------
+
+test('first click on copy-this-source is not swallowed by a blur re-render', async () => {
+  const boot = makeBoot();
+  await boot.loadKit(await buildKit(boot.JSZip, [segment(1, { protectedSource: 'Line one.' }), segment(2)]));
+  const model = boot.app.model;
+  const UI = boot.app.UI.zh;
+  const ta0 = boot.el('list').querySelectorAll('.translation')[0];
+  ta0.focus(); ta0.value = '正在输入'; ta0.dispatchEvent('input');
+  const copyBtn = boot.el('list').querySelectorAll('button').find((b) => b.textContent === UI.copyOne);
+  const fired = boot.pressClick(copyBtn); // mousedown -> blur -> click
+  assert.equal(fired, true, 'the click still reaches a still-connected button');
+  assert.equal(model.segments[0].translation, 'Line one.', 'the FIRST click copies the source');
+  assert.equal(model.hist.length, 2, 'typing + copy recorded, no duplicate');
+  const focused = boot.document.activeElement;
+  assert.ok(focused && focused.className.includes('translation'), 'focus restored to the new box');
+
+  // sanity: once a rebuild really detaches a button, the simulator drops its click
+  const staleBtn = boot.el('list').querySelectorAll('button').find((b) => b.textContent === UI.copyOne);
+  boot.app.applyChanges([{ unitId: '2:0-10', field: 'translation', before: '', after: 'x' }], 'force-render');
+  assert.equal(boot.pressClick(staleBtn), false, 'a detached button no longer receives a click');
+});
+
+test('first click on replace-keywords is not swallowed by a blur re-render', async () => {
+  const boot = makeBoot();
+  await boot.loadKit(await buildKit(boot.JSZip, [segment(1, { protectedSource: 'You see Robin.' }), segment(2)]));
+  const model = boot.app.model;
+  const UI = boot.app.UI.zh;
+  boot.el('termSource').value = 'Robin'; boot.el('termTarget').value = '罗宾';
+  boot.el('termForm').dispatchEvent('submit', { preventDefault() {} });
+  const ta0 = boot.el('list').querySelectorAll('.translation')[0];
+  ta0.focus(); ta0.value = 'Robin！'; ta0.dispatchEvent('input');
+  const btn = boot.el('list').querySelectorAll('button').find((b) => b.textContent === UI.replaceKeywords);
+  const fired = boot.pressClick(btn);
+  assert.equal(fired, true);
+  assert.equal(model.segments[0].translation, '罗宾！', 'the FIRST click replaces the keyword');
+  assert.equal(model.hist.length, 2);
+});
+
+test('status and note controls stay usable while editing (same blur timing)', async () => {
+  const boot = makeBoot();
+  await boot.loadKit(await buildKit(boot.JSZip, [segment(1), segment(2)]));
+  const model = boot.app.model;
+  const ta0 = boot.el('list').querySelectorAll('.translation')[0];
+  const sel = boot.el('list').querySelectorAll('select')[0];
+  const note = boot.el('list').querySelectorAll('.note')[0];
+  ta0.focus(); ta0.value = 'typed'; ta0.dispatchEvent('input');
+  // moving to the status select must not detach it
+  boot.document.activeElement.blur();
+  assert.equal(boot.isConnected(sel), true, 'status select survives the field blur');
+  assert.equal(boot.isConnected(note), true, 'note input survives the field blur');
+  sel.value = 'reviewed'; sel.dispatchEvent('change');
+  assert.equal((model.meta.get('1:0-10') || {}).status, 'reviewed');
+  // the note input is usable after the re-render that the status change triggers
+  const note2 = boot.el('list').querySelectorAll('.note')[0];
+  assert.ok(note2, 'note input rendered after the status change');
+  note2.focus(); note2.value = '备注'; note2.blur();
+  assert.equal((model.meta.get('1:0-10') || {}).note, '备注');
+  assert.equal(model.modified, true);
+});
+
+test('copy while editing works with a filter active', async () => {
+  const boot = makeBoot();
+  await boot.loadKit(await buildKit(boot.JSZip, [segment(1, { protectedSource: 'Line one.' }), segment(2)]));
+  const model = boot.app.model;
+  const UI = boot.app.UI.zh;
+  boot.el('filter').value = 'todo'; boot.el('filter').dispatchEvent('change');
+  const idx = model.segments.findIndex((s) => s.unitId === '1:0-10');
+  const ta = boot.el('list').querySelectorAll('.translation')[idx];
+  ta.focus(); ta.value = 'typed'; ta.dispatchEvent('input');
+  const copyBtn = boot.el('list').querySelectorAll('button').find((b) => b.textContent === UI.copyOne);
+  const fired = boot.pressClick(copyBtn);
+  assert.equal(fired, true, 'first click still fires under an active filter');
+  assert.equal(model.segments[0].translation, 'Line one.');
+  assert.equal(model.hist.length, 2);
 });

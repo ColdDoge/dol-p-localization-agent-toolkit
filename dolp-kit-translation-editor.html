@@ -1157,7 +1157,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     note.addEventListener('focus',()=>{note.dataset.before=metaOf(s.unitId).note||'';});
     note.addEventListener('blur',()=>{
       const before=note.dataset.before??'';const after=note.value;if(before===after)return;
-      commitEntry({label:tr('noteLabel'),ops:[{unitId:s.unitId,target:'meta',field:'note',before,after}]});
+      // Same timing rule as the translation field: never rebuild mid-interaction.
+      commitEntry({label:tr('noteLabel'),ops:[{unitId:s.unitId,target:'meta',field:'note',before,after}],noRender:true});
+      scheduleConditionalRerender();
     });
     statusRow.append(statusLbl,statusSel,note);
     function changeTo(next){
@@ -1196,9 +1198,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     textarea.addEventListener('blur',()=>{
       if(model.fieldStart&&model.fieldStart.unitId===s.unitId){
         const before=model.fieldStart.value;const after=String(s.translation??'');model.fieldStart=null;
-        if(before!==after){commitEntry({label:tr('translationLabel'),ops:[{unitId:s.unitId,target:'seg',field:'translation',before,after}],noApply:true,count:false});}
+        // Record without re-rendering: a rebuild here (mousedown -> blur) would
+        // detach the pressed copy/replace button before its click event fires.
+        if(before!==after){commitEntry({label:tr('translationLabel'),ops:[{unitId:s.unitId,target:'seg',field:'translation',before,after}],noApply:true,count:false,noRender:true});}
       }
-      if(model.filter!=='all'||model.sort!=='default'||model.query||model.termFilter) setTimeout(()=>{if(document.activeElement!==textarea){updateFilter();renderList();}},25);
+      scheduleConditionalRerender();
     });
     tw.append(header,textarea,foot,statusRow);body.append(label1,orig,copybar,tw);item.append(head,body);return item;
   }
@@ -1555,6 +1559,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     try{if(typeof node.setSelectionRange==='function'&&typeof node.value==='string')node.setSelectionRange(node.value.length,node.value.length);}catch{}
     return true;
   }
+  // True while focus is still inside the item list, so a deferred re-render
+  // never removes the control the user is currently interacting with.
+  function focusInList(){let n=document.activeElement;while(n){if(n.id==='list')return true;n=n.parentNode;}return false;}
+  // Visibility may need to change after a filter/search edit, but only once the
+  // user has left the list; a mid-interaction rebuild would drop the next click.
+  function scheduleConditionalRerender(){
+    if(model.filter==='all'&&model.sort==='default'&&!model.query&&!model.termFilter)return;
+    setTimeout(()=>{if(!focusInList()){updateFilter();renderList();}},25);
+  }
   function metaOf(unitId){let m=model.meta.get(unitId);if(!m){m={status:'unmarked',note:''};model.meta.set(unitId,m);}return m;}
   function statusKey(st){return st==='proofread'?'statusProofread':st==='reviewed'?'statusReviewed':st==='flagged'?'statusFlagged':'statusUnmarked';}
   function segById(id){return model.byId.get(id);}
@@ -1582,11 +1595,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if(entry.count!==false)markDirty();
     pushHistory(entry);
     if(!entry.noApply)applyOps(entry.ops,'redo');
-    afterChange();
+    // `noRender` records history / dirty / draft WITHOUT rebuilding the list.
+    // Blur handlers use it: a synchronous rebuild during mousedown would remove
+    // the button the user is pressing, so the browser never fires its click.
+    if(entry.noRender)afterLightChange();else afterChange();
   }
   function afterChange(){
     model.analysisStale=true;
     updateCounts();renderList();queueDraft();refreshAnalysisSoon();
+  }
+  function afterLightChange(){
+    model.analysisStale=true;
+    updateCounts();queueDraft();refreshAnalysisSoon();
   }
   function commitPendingField(){const ae=document.activeElement;if(ae&&/^(TEXTAREA|INPUT)$/.test(ae.tagName))ae.blur();}
   function undo(){
