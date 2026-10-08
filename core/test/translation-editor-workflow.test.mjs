@@ -200,6 +200,10 @@ function makeBoot({ confirmDefault = true } = {}) {
       await appApi.loadFile(buffer);
       return appApi.model;
     },
+    seedDraft(key, record) {
+      if (!stores.has('drafts')) stores.set('drafts', new Map());
+      stores.get('drafts').set(key, record);
+    },
   };
 }
 
@@ -609,4 +613,132 @@ test('project status is not reused across different kits (verify source, skip un
   await boot.loadKit(zipA, 'A2.zip');
   await boot.app.importProject({ name: 'A.dolpkit.json', size: 10, async text() { return JSON.stringify(doc); } });
   assert.equal(boot.app.model.meta.get('1:0-10').status, 'reviewed');
+});
+
+// ---------------------------------------------------------------------------
+// Third round: copy/replace history, ignored-term safety, draft-backup identity.
+// ---------------------------------------------------------------------------
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const jsonFile = (doc, name = 'project.dolpkit.json') => ({ name, size: 10, async text() { return JSON.stringify(doc); } });
+
+test('copy-one is a single undoable/redoable operation (no duplicate blur record)', async () => {
+  const boot = makeBoot();
+  await boot.loadKit(await buildKit(boot.JSZip, [segment(1, { protectedSource: 'Line one.' })]));
+  const model = boot.app.model;
+  const UI = boot.app.UI.zh;
+  model.segments[0].translation = 'old';
+  const copyBtn = boot.el('list').querySelectorAll('button').find((b) => b.textContent === UI.copyOne);
+  assert.ok(copyBtn, 'copy button present');
+  copyBtn.click();
+  assert.equal(model.segments[0].translation, 'Line one.');
+  assert.equal(model.hist.length, 1, 'copy is exactly one history entry');
+  assert.equal(model.modified, true, 'copy marks the project unexported');
+  assert.equal(model.draftState, 'saving', 'copy schedules a draft save');
+  boot.app.undo();
+  assert.equal(model.segments[0].translation, 'old');
+  boot.app.redo();
+  assert.equal(model.segments[0].translation, 'Line one.');
+  // a later blur must not add a second entry for the same copy
+  const ta = boot.el('list').querySelectorAll('.translation')[0];
+  ta.focus(); ta.blur();
+  assert.equal(model.hist.length, 1, 'blur did not duplicate the copy history');
+});
+
+test('replace-keywords is a single undoable/redoable operation', async () => {
+  const boot = makeBoot();
+  await boot.loadKit(await buildKit(boot.JSZip, [segment(1, { protectedSource: 'You see Robin.' })]));
+  const model = boot.app.model;
+  const UI = boot.app.UI.zh;
+  boot.el('termSource').value = 'Robin'; boot.el('termTarget').value = '罗宾';
+  boot.el('termForm').dispatchEvent('submit', { preventDefault() {} });
+  model.segments[0].translation = 'Robin!';
+  const btn = boot.el('list').querySelectorAll('button').find((b) => b.textContent === UI.replaceKeywords);
+  assert.ok(btn, 'replace-keywords button present');
+  btn.click();
+  assert.equal(model.segments[0].translation, '罗宾!');
+  assert.equal(model.hist.length, 1, 'replace is exactly one history entry');
+  assert.equal(model.modified, true);
+  boot.app.undo();
+  assert.equal(model.segments[0].translation, 'Robin!');
+  boot.app.redo();
+  assert.equal(model.segments[0].translation, '罗宾!');
+});
+
+test('importing a project applies a trusted ignored term as one undoable change', async () => {
+  const boot = makeBoot();
+  await boot.loadKit(await buildKit(boot.JSZip, [segment(1, { protectedSource: 'You see Robin.' })]));
+  const model = boot.app.model;
+  const key = '1:0-10\u0001Robin';
+  boot.app.exportProject();
+  const doc = JSON.parse(await boot.blobs.at(-1).text());
+  doc.records = {}; doc.translations = {}; doc.ignoredTerms = [key]; // a "clean" project with only an ignore
+  assert.equal(model.modified, false);
+  await boot.app.importProject(jsonFile(doc));
+  assert.equal(model.ignoredTerms.has(key), true, 'trusted ignore applied');
+  assert.equal(model.modified, true, 'ignore change marks unexported');
+  assert.equal(model.draftState, 'saving', 'ignore change schedules a draft save');
+  assert.equal(model.hist.length, 1, 'ignore change is one history entry');
+  boot.app.undo();
+  assert.equal(model.ignoredTerms.has(key), false);
+  boot.app.redo();
+  assert.equal(model.ignoredTerms.has(key), true);
+});
+
+test('ignored terms are not reused across different kits with the same unitId', async () => {
+  const boot = makeBoot();
+  const A = [segment(1, { protectedSource: 'AAA Robin.' })];
+  const B = [segment(1, { protectedSource: 'BBB Robin.' })];
+  const zipA = await buildKit(boot.JSZip, A, manifest({ count: 1, extra: { targetStory: { sha256: 'story-A' } } }));
+  const zipB = await buildKit(boot.JSZip, B, manifest({ count: 1, extra: { targetStory: { sha256: 'story-B' } } }));
+  await boot.loadKit(zipA, 'A.zip');
+  boot.app.exportProject();
+  const doc = JSON.parse(await boot.blobs.at(-1).text());
+  doc.records = {}; doc.translations = {}; doc.ignoredTerms = ['1:0-10\u0001Robin'];
+  await boot.loadKit(zipB, 'B.zip');
+  await boot.app.importProject(jsonFile(doc));
+  assert.equal(boot.app.model.ignoredTerms.has('1:0-10\u0001Robin'), false, 'unverified ignore must be rejected');
+  assert.equal(boot.app.model.modified, false, 'rejecting everything leaves the project untouched');
+  assert.equal(boot.app.model.hist.length, 0);
+});
+
+test('draft backup while switching kits uses the incoming kit identity and sources', async () => {
+  const boot = makeBoot();
+  const zipA = await buildKit(boot.JSZip, [segment(1, { protectedSource: 'AAA line.' })], manifest({ count: 1, extra: { targetStory: { sha256: 'story-A' } } }));
+  const zipB = await buildKit(boot.JSZip, [segment(2, { protectedSource: 'BBB line.' })], manifest({ count: 1, extra: { targetStory: { sha256: 'story-B' } } }));
+  await boot.loadKit(zipA, 'A.zip');
+  const keyA = boot.app.model.draftKey;
+  boot.app.applyChanges([{ unitId: '1:0-10', field: 'translation', before: '', after: '草稿A' }], 'edit');
+  await sleep(900);
+  assert.equal(boot.app.model.draftState, 'saved', 'draft A saved');
+  await boot.loadKit(zipB, 'B.zip'); // current model is now B
+  const p = boot.loadKit(zipA, 'A2.zip'); // prompt for A's draft, model still B at this point
+  await sleep(300);
+  const btns = boot.el('modalActions').querySelectorAll('button');
+  assert.ok(btns.length >= 3, 'restore dialog shown');
+  btns[2].click(); // export draft backup
+  await p;
+  const doc = JSON.parse(await boot.blobs.at(-1).text());
+  assert.equal(doc.identity.targetStorySha256, 'story-A', 'backup identity is the incoming kit, not the previous one');
+  assert.equal(doc.sources['1:0-10'], 'AAA line.', 'backup sources come from the incoming kit');
+  assert.equal(doc.projectId, keyA);
+  assert.equal(doc.translations['1:0-10'], '草稿A');
+});
+
+test('draft backup on the first open uses the incoming kit identity and sources', async () => {
+  const boot = makeBoot();
+  await sleep(20);
+  const buf = await buildKit(boot.JSZip, [segment(1, { protectedSource: 'FIRST line.' })], manifest({ count: 1, extra: { targetStory: { sha256: 'story-first' } } }));
+  const key = 'v1:story-first:inv-1:1:1:0-10:1:0-10';
+  boot.seedDraft(key, { id: key, translations: { '1:0-10': '先前草稿' }, records: {}, ignoredTerms: [], updatedAt: Date.now() });
+  const p = boot.loadKit(buf, 'first.zip');
+  await sleep(300);
+  const btns = boot.el('modalActions').querySelectorAll('button');
+  assert.ok(btns.length >= 3, 'restore dialog shown on first open');
+  btns[2].click();
+  await p;
+  const doc = JSON.parse(await boot.blobs.at(-1).text());
+  assert.equal(doc.identity.targetStorySha256, 'story-first');
+  assert.equal(doc.projectId, key);
+  assert.equal(doc.sources['1:0-10'], 'FIRST line.');
 });

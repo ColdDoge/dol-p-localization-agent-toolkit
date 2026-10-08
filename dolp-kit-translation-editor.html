@@ -816,6 +816,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       projectAria:'编辑工程',exportProject:'导出编辑工程 JSON',importProject:'导入编辑工程 JSON',projectHint:'编辑工程独立保存状态标记、备注与忽略项，不会写入游戏翻译包。',
       projectSaved:'编辑工程已导出，请另行备份',projectBad:'不是本编辑器支持的编辑工程文件',projectLoaded:'编辑工程已导入：状态 {n} 条',projectMismatch:'工程对应的 Kit 与当前 Kit 不同；仅合并条目 ID 相同且原文一致的状态标记',projectTranslationsConfirm:'工程内含译文：是否用其中译文填充当前空白条目？',projectFilled:'已从工程填充 {n} 条空白译文',
       projectSkipped:'已跳过 {n} 条无法确认原文的状态记录',
+      projectIgnoredSkipped:'已跳过 {n} 条无法验证身份的忽略项',projectIgnoredApplied:'已应用 {n} 条忽略项',
       safetyIntro:'安全检查只比对结构与占位符，绝不会修改任何译文。',safetyCheckAll:'检查全部条目',safetyCheckCurrent:'检查当前条目',safetyOk:'未发现结构问题。',safetyFound:'发现 {n} 条问题',safetyReset:'已清除检查结果',safetyNone:'尚未运行检查。',
       sevError:'错误',sevWarn:'警告',sevInfo:'提示',locate:'定位',
       issue_PLACEHOLDER_COUNT_CHANGED:'占位符数量与原文不一致',issue_PLACEHOLDER_MISMATCH:'占位符与原文不匹配',issue_PLACEHOLDER_ORDER_CHANGED:'占位符顺序与原文不一致',issue_UNEXPECTED_STRUCTURE:'译文里出现原文没有的结构（宏/变量/标签/链接）',issue_SAME_AS_SOURCE:'译文与原文完全相同',issue_EDGE_WHITESPACE:'译文首尾有多余空白',
@@ -916,6 +917,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       projectAria:'Editor project',exportProject:'Export project JSON',importProject:'Import project JSON',projectHint:'The project file keeps status marks, notes, and ignored terms; it is never written into the Kit.',
       projectSaved:'Project exported. Keep a separate backup.',projectBad:'Not a supported editor project file',projectLoaded:'Project imported: {n} status records',projectMismatch:'The project belongs to a different Kit; only status for identical unitId + source is merged',projectTranslationsConfirm:'The project contains translations: fill the current blank entries from it?',projectFilled:'Filled {n} blank translations from the project',
       projectSkipped:'Skipped {n} status records whose source could not be confirmed',
+      projectIgnoredSkipped:'Skipped {n} unverified ignored term(s)',projectIgnoredApplied:'Applied {n} ignored-term change(s)',
       safetyIntro:'The safety check only compares structure and placeholders; it never changes any translation.',safetyCheckAll:'Check all entries',safetyCheckCurrent:'Check current entry',safetyOk:'No structural problems found.',safetyFound:'{n} problem(s) found',safetyReset:'Check results cleared',safetyNone:'No check has been run yet.',
       sevError:'Error',sevWarn:'Warning',sevInfo:'Hint',locate:'Locate',
       issue_PLACEHOLDER_COUNT_CHANGED:'Placeholder count differs from the source',issue_PLACEHOLDER_MISMATCH:'Placeholders do not match the source',issue_PLACEHOLDER_ORDER_CHANGED:'Placeholder order differs from the source',issue_UNEXPECTED_STRUCTURE:'Translation contains structure the source does not (macro / variable / tag / link)',issue_SAME_AS_SOURCE:'Translation is identical to the source',issue_EDGE_WHITESPACE:'Translation has extra leading or trailing whitespace',
@@ -1166,14 +1168,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
     textarea.addEventListener('input',()=>{changeTo(textarea.value);});
     textarea.addEventListener('focus',()=>{model.fieldStart={unitId:s.unitId,value:String(s.translation??'')};});
+    // Record a programmatic edit (copy-one / replace-keywords) as one history
+    // entry, and move the pending-field baseline to the new value so the later
+    // blur handler cannot record the same change twice.
+    function recordEdit(label,before,after){
+      if(before===after)return;
+      commitEntry({label,ops:[{unitId:s.unitId,target:'seg',field:'translation',before,after}],noApply:true,count:false});
+      model.fieldStart={unitId:s.unitId,value:String(s.translation??'')};
+    }
     copyBtn.addEventListener('click',()=>{
       if(completed(s)&&s.translation!==s.protectedSource&&!confirm(tr('confirmCopyOne')))return;
-      if(changeTo(s.protectedSource))toast(tr('copiedOne'));
+      const before=String(s.translation??'');
+      if(changeTo(s.protectedSource)){recordEdit(tr('copyOne'),before,String(s.translation??''));toast(tr('copiedOne'));}
       textarea.focus();
     });
     replaceBtn.addEventListener('click',()=>{
-      const original=String(s.translation??'');const result=replaceKeywords(original);
-      if(changeTo(result))textarea.focus();
+      const before=String(s.translation??'');const result=replaceKeywords(before);
+      if(changeTo(result)){recordEdit(tr('replaceKeywords'),before,String(s.translation??''));textarea.focus();}
     });
     textarea.addEventListener('keydown',e=>{
       if(e.altKey&&e.key==='Enter'){
@@ -1386,7 +1397,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         if(diffCount){
           const choice=await showRestoreDialog(previous,diffCount);
           if(choice==='restore'){applyDraft(previous,segments);restored=true;toast(tr('recoveredDraft'));}
-          else if(choice==='backup')exportDraftSnapshot(previous,file.name);
+          else if(choice==='backup')exportDraftSnapshot(previous,file.name,{manifest,segments,draftKey});
         }
       }
       // Commit state after all validations have passed.
@@ -1540,6 +1551,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     for(const op of ops){
       const val=dir==='undo'?op.before:op.after;
       if(op.target==='meta')metaOf(op.unitId)[op.field]=val;
+      else if(op.target==='ignore'){if(val)model.ignoredTerms.add(op.key);else model.ignoredTerms.delete(op.key);}
       else{const s=segById(op.unitId);if(s)s[op.field]=val;}
     }
   }
@@ -1876,10 +1888,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       {label:tr('exportDraftBackup'),value:'backup'},
     ]});
   }
-  function currentIdentity(){const m=model.manifest||{};const seg=model.segments;return {targetStorySha256:m.targetStory?.sha256||'',inventoryFingerprint:m.inventoryFingerprint||'',schemaVersion:m.schemaVersion||'',targetLanguage:m.targetLanguage||'',exportedCount:seg.length,firstUnitId:seg[0]?.unitId||'',lastUnitId:seg[seg.length-1]?.unitId||''};}
-  function exportDraftSnapshot(previous,name){
-    const sources={};for(const s of model.segments)sources[s.unitId]=String(s.protectedSource??'');
-    const doc={format:EditorEngine.PROJECT_FORMAT,version:EditorEngine.PROJECT_VERSION,projectId:model.draftKey||'',identity:currentIdentity(),savedAt:new Date(previous.updatedAt||Date.now()).toISOString(),records:previous.records||{},ignoredTerms:previous.ignoredTerms||[],translations:previous.translations||{},sources};
+  function identityFrom(manifest,segments){const m=manifest||{};const seg=segments||[];return {targetStorySha256:m.targetStory?.sha256||'',inventoryFingerprint:m.inventoryFingerprint||'',schemaVersion:m.schemaVersion||'',targetLanguage:m.targetLanguage||'',exportedCount:seg.length,firstUnitId:seg[0]?.unitId||'',lastUnitId:seg[seg.length-1]?.unitId||''};}
+  function currentIdentity(){return identityFrom(model.manifest,model.segments);}
+  // `ctx` carries the kit currently being imported, because model.segments /
+  // model.manifest still hold the *previous* kit when the restore dialog runs.
+  function exportDraftSnapshot(previous,name,ctx){
+    const manifest=(ctx&&ctx.manifest)||model.manifest;
+    const segments=(ctx&&ctx.segments)||model.segments;
+    const sources={};for(const s of segments)sources[s.unitId]=String(s.protectedSource??'');
+    const doc={format:EditorEngine.PROJECT_FORMAT,version:EditorEngine.PROJECT_VERSION,projectId:(ctx&&ctx.draftKey)||model.draftKey||'',identity:identityFrom(manifest,segments),savedAt:new Date(previous.updatedAt||Date.now()).toISOString(),records:previous.records||{},ignoredTerms:previous.ignoredTerms||[],translations:previous.translations||{},sources};
     downloadBlob(new Blob([JSON.stringify(doc,null,2)+'\n'],{type:'application/json;charset=utf-8'}),(name||model.filename||'draft').replace(/\.zip$/i,'')+'-draft.dolpkit.json');
     toast(tr('draftBackupSaved'));
   }
@@ -1928,7 +1945,26 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         if(r.status!==m.status)ops.push({unitId:s.unitId,target:'meta',field:'status',before:m.status,after:r.status});
         if(r.note!==m.note)ops.push({unitId:s.unitId,target:'meta',field:'note',before:m.note,after:r.note});
       }
-      for(const key of v.ignoredTerms)model.ignoredTerms.add(key);
+      // Ignored-term keys are unitId-scoped. Only trust a key whose unit identity
+      // is confirmed (same kit, or matching recorded source); never import
+      // ignores from an unverified kit. Valid changes are undoable/redoable.
+      const confirmedUnits=new Set();
+      for(const s of model.segments)if(confirmed(s))confirmedUnits.add(s.unitId);
+      const trustedIgnored=new Set();
+      let rejectedIgnored=0;
+      for(const key of v.ignoredTerms){
+        if(typeof key!=='string')continue;
+        const unitId=key.split('\u0001')[0];
+        if(confirmedUnits.has(unitId))trustedIgnored.add(key);else rejectedIgnored++;
+      }
+      let ignoredOps=0;
+      for(const key of trustedIgnored)if(!model.ignoredTerms.has(key)){ops.push({target:'ignore',key,before:false,after:true});ignoredOps++;}
+      if(Array.isArray(doc.ignoredTerms)){
+        for(const key of [...model.ignoredTerms]){
+          const unitId=String(key).split('\u0001')[0];
+          if(confirmedUnits.has(unitId)&&!trustedIgnored.has(key)){ops.push({target:'ignore',key,before:true,after:false});ignoredOps++;}
+        }
+      }
       let filled=0;
       if(sameKit||sources){
         const fillChanges=[];
@@ -1945,8 +1981,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
       if(!sameKit)status(tr('projectMismatch'),'warn');
       if(skipped)status(tr('projectSkipped',{n:skipped}),'warn');
+      if(rejectedIgnored)status(tr('projectIgnoredSkipped',{n:rejectedIgnored}),'warn');
       if(ops.length)commitEntry({label:tr('importProject'),ops});else{model.analysisStale=true;updateCounts();}
       toast(tr('projectLoaded',{n:recCount}));if(filled)toast(tr('projectFilled',{n:filled}));
+      if(ignoredOps)toast(tr('projectIgnoredApplied',{n:ignoredOps}));
     }catch(e){status(tr('projectBad'),'error');}
     finally{$('projectFile').value='';}
   }
