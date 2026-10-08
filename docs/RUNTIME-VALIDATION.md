@@ -12,7 +12,7 @@ do, and only after you ask for them.
 | a device with the target app installed | the artifact under test | user-supplied |
 | `adb` (Android SDK Platform-Tools) | device / socket / loopback forward | required |
 | Google Android CLI | screenshot / annotate / layout | optional (inspect only) |
-| Paisley Park | `scripts/android-inspect.cjs`, `scripts/adb-backup-app-data.py` | optional (screenshot / backup evidence), external, not vendored |
+| Paisley Park | `scripts/android-inspect.cjs`, `scripts/adb-backup-app-data.py` | optional (screenshot / backup evidence), external, not vendored. Setup, skill install and the DoLP-specific limits are recorded in [Paisley-Park-3.0.2-接入与验收.md](Paisley-Park-3.0.2-接入与验收.md) |
 | Node.js >= 22 | the harness | required |
 
 Configure with `_local/android-config.local.json` (git-ignored) or environment

@@ -232,6 +232,8 @@ docs/             工作流与技术参考文档
 - [Version migration](docs/VERSION-MIGRATION.md)
 - [Protection rules](docs/PROTECTION-RULES.md)
 - [Runtime validation](docs/RUNTIME-VALIDATION.md)
+- [新工作区从零验收指南](docs/新工作区从零验收指南.md) — 给没有历史上下文的 Agent 的端到端流程
+- [Paisley Park 3.0.2 接入与验收](docs/Paisley-Park-3.0.2-接入与验收.md) — 外部真机工具的可选接入
 
 ## 许可证
 
