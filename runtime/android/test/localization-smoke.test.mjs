@@ -12,6 +12,7 @@ import { restoreProtected } from '../../../core/src/lib/protect.mjs';
 import { sourceFingerprint, structuralKey, protectedHash } from '../../../core/src/lib/structure-cache.mjs';
 import { loadScenarioSpec, validateScenario } from '../lib/localization-scenarios.mjs';
 import { evaluateScenarioResult, scriptLocalizationScenario } from '../lib/localization-scripts.mjs';
+import { scenariosForRun } from '../test-localization-runtime.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..', '..');
@@ -107,6 +108,13 @@ test('offline smoke builder validates expectations and writes a pack', () => {
   assert.ok(fs.existsSync(path.join(outDir, 'expectations.json')));
   const expectation = JSON.parse(fs.readFileSync(path.join(outDir, 'expectations.json'), 'utf8'));
   assert.equal(expectation.kind, 'localization-smoke-expectations');
+    // The level registry travels with the file so a later run can select from it.
+    assert.deepEqual(expectation.levels, {
+      smoke: ['a1-start', 'c1-notice'],
+      regression: ['a1-start', 'a2-hallway'],
+      exhaustive: ['a1-start', 'a2-hallway', 'c1-notice'],
+    });
+    assert.equal(expectation.scenarios.length, 3, 'built at exhaustive, so it carries every scene');
   assert.ok(fs.existsSync(path.resolve(REPO, expectation.pack.path)));
 });
 
@@ -119,4 +127,41 @@ test('offline smoke builder fails when an expectation is not satisfied', () => {
   const res = runBuilder(['--story', STORY, '--state', statePath, '--scenarios', scenarioPath, '--out-dir', path.join(dir, 'out')]);
   assert.equal(res.code, 1, res.stdout);
   assert.ok(!fs.existsSync(path.join(dir, 'out', 'expectations.json')));
+});
+
+// ---------------------------------------------------------------------------
+// --level selects from an expectations file that carries the level registry
+// ---------------------------------------------------------------------------
+
+const LEVEL_REGISTRY = {
+  smoke: ['a1-start', 'c1-notice'],
+  regression: ['a1-start', 'a2-hallway'],
+  exhaustive: ['a1-start', 'a2-hallway', 'c1-notice'],
+};
+const STORED_SCENARIOS = [
+  { id: 'a1-start', tier: 'A' },
+  { id: 'a2-hallway', tier: 'A' },
+  { id: 'c1-notice', tier: 'C' },
+];
+
+test('--level selects the scenes when the expectations file carries the registry', () => {
+  const expectations = { scenarios: STORED_SCENARIOS, levels: LEVEL_REGISTRY };
+  assert.deepEqual(scenariosForRun(expectations, 'smoke').scenarios.map((s) => s.id), ['a1-start', 'c1-notice']);
+  assert.deepEqual(scenariosForRun(expectations, 'regression').scenarios.map((s) => s.id), ['a1-start', 'a2-hallway']);
+  assert.deepEqual(scenariosForRun(expectations, 'exhaustive').scenarios.map((s) => s.id), ['a1-start', 'a2-hallway', 'c1-notice']);
+  assert.equal(scenariosForRun(expectations, 'smoke').source, 'levels.smoke');
+});
+
+test('an older expectations file without a registry keeps its stored scenes', () => {
+  const expectations = { scenarios: STORED_SCENARIOS };
+  const picked = scenariosForRun(expectations, 'smoke');
+  assert.equal(picked.scenarios.length, 3, 'nothing is filtered away when the registry is absent');
+  assert.equal(picked.source, 'expectations-file');
+});
+
+test('a level that selects nothing falls back to the stored scenes', () => {
+  const expectations = { scenarios: STORED_SCENARIOS, levels: { smoke: ['a1-start', 'c1-notice'], regression: ['missing-scene'], exhaustive: ['a1-start'] } };
+  assert.equal(scenariosForRun(expectations, 'regression').scenarios.length, 3);
+  assert.equal(scenariosForRun(expectations, 'regression').source, 'expectations-file');
+  assert.equal(scenariosForRun(expectations, 'some-other-level').scenarios.length, 3);
 });

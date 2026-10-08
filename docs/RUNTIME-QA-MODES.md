@@ -19,6 +19,21 @@ regression   only the scenes listed under levels.regression
 exhaustive   only the scenes listed under levels.exhaustive
 ```
 
+The offline builder records the scenario file's full `levels` registry inside
+`expectations.json`, so a run can select from a pack that was built at a wider
+level (build once at `exhaustive`, then run `--level regression`). An
+expectations file written before that registry existed only ever held the
+scenes of its own build level, so it is used as-is rather than filtering
+nothing out. `report.target.scenarioSource` says which of the two happened.
+
+Scenes run without the game's own developer diagnostics: the harness leaves
+`$options.debugdisable` at its shipped default instead of forcing it on. That
+flag makes the game report its own state problems (its NaN scan over every
+variable, undefined prints) as page errors, which a fresh cheat session
+produces in every stateful passage; counted as `js-errors` they would fail
+scenes the pack never touched. Real breakage still shows up — a malformed macro
+or tag raises a SugarCube error regardless.
+
 ## Evidence flags
 
 | flag | effect |

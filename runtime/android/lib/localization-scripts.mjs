@@ -33,7 +33,15 @@ const PREAMBLE = `
   // Disable autosave for this disposable session before anything can navigate.
   try { if (State.variables.options) State.variables.options.autosaveDisabled = true; } catch {}
   try { State.variables.debug = 1; } catch {}
-  try { if (State.variables.options) State.variables.options.debugdisable = 'f'; } catch {}
+  // Leave the game's own developer diagnostics off (this option's shipped
+  // default is "t"). Forcing "f" turns on the game's *state* checks — its NaN
+  // scan over every variable, undefined-print reporting — which fire on a fresh
+  // cheat session because combat variables start at zero. Those are page errors
+  // unrelated to the pack under test: every stateful scene reported
+  // js-errors, and the post-cleanup restore check could never see
+  // bodyErrors === 0. Real breakage still shows — a malformed macro or tag
+  // raises a SugarCube error regardless of this option.
+  try { if (State.variables.options) State.variables.options.debugdisable = 't'; } catch {}
   try { if (typeof closeOverlay === 'function') closeOverlay(); } catch {}
 
   // Establish one disposable cheat session per page load. The "a run is under

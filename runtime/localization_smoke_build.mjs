@@ -162,6 +162,9 @@ function main() {
     source: sourceLabel,
     pack: { name: boot.name, version: boot.version, path: repoRel(zipPath).replace(/\\/g, '/'), sha256: crypto.createHash('sha256').update(zipBuf).digest('hex'), entries: built.entries.length },
     scenarios: selected,
+    // The full level registry, so the runtime harness can honour --level on
+    // an expectations file that was built at a wider level than the run.
+    levels: spec.levels,
     counts: coverage.counts,
     unmatched: unmatched.length,
   };

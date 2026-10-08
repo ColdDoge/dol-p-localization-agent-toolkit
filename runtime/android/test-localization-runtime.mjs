@@ -75,6 +75,25 @@ export function parseArgs(argv) {
   return args;
 }
 
+/**
+ * Which scenes this run should visit.
+ *
+ * An expectations file built at a wider level still carries every scene plus
+ * the registry it came from, so `--level` selects from it. An older file has
+ * no registry: it only ever held the scenes of its own build level, so the
+ * stored list is used as-is (the historical behaviour) rather than silently
+ * running nothing.
+ */
+export function scenariosForRun(expectations, level) {
+  const stored = Array.isArray(expectations && expectations.scenarios) ? expectations.scenarios : [];
+  const levels = expectations && expectations.levels;
+  if (!levels || !Array.isArray(levels[level])) return { scenarios: stored, source: 'expectations-file' };
+  const byId = new Map(stored.map((s) => [s.id, s]));
+  const selected = levels[level].map((id) => byId.get(id)).filter(Boolean);
+  if (!selected.length) return { scenarios: stored, source: 'expectations-file' };
+  return { scenarios: selected, source: `levels.${level}` };
+}
+
 function defaultDeps() {
   const config = loadConfig({ repoRoot: REPO_ROOT });
   return {
@@ -161,12 +180,15 @@ export async function runLocalizationRuntime(options, deps) {
     report.finishedAt = deps.now().toISOString();
     return report;
   }
-  const scenarios = expectations.scenarios && expectations.scenarios.length
-    ? expectations.scenarios
+  const picked = scenariosForRun(expectations, options.level);
+  const scenarios = picked.scenarios.length
+    ? picked.scenarios
     : scenariosForLevel({ scenarios: [], levels: {} }, options.level);
   report.target = {
     storySha256: expectations.targetStory || null,
     packagePath: (expectations.pack && expectations.pack.path) || null,
+    scenarioSource: picked.source,
+    scenarioIds: scenarios.map((s) => s.id),
   };
   const zipPath = path.resolve(REPO_ROOT, (expectations.pack && expectations.pack.path) || '');
   if (!expectations.pack || !fs.existsSync(zipPath)) {
