@@ -14,6 +14,7 @@
 
 import { compareStructures } from './protection-v3.mjs';
 import { CONTEXT_WRITING_MACROS } from './context-semantics.mjs';
+import { SOFT_MACROS } from './protection.mjs';
 
 const PLACEHOLDER_RE = /\u27e6\d+\u27e7/g;
 
@@ -61,6 +62,11 @@ export function macroNames(text) {
  * is sanctioned only for the omitted forms, and never for context-writing
  * selectors (`personselect/person1/2/3/…`), whose state writes must be
  * preserved. This derives the omission set from the source/target macro delta.
+ *
+ * Only `SOFT_MACROS` (pronouns and pure output macros) can be registered: the
+ * concept is "this sentence does not need the word", and restricting it keeps
+ * a structural macro (`<<if>>`, `<<set>>`, a renamed macro the target parser
+ * no longer recognises) from ever being read as an omitted pronoun.
  */
 export function derivePronounOmissions(fromRaw, toRaw) {
   const a = macroNames(fromRaw);
@@ -72,6 +78,7 @@ export function derivePronounOmissions(fromRaw, toRaw) {
   for (const n of a) {
     seen.set(n, (seen.get(n) || 0) + 1);
     if (CONTEXT_WRITING_MACROS.has(n)) continue;
+    if (!SOFT_MACROS.has(n)) continue;
     if ((counts.get(n) || 0) < seen.get(n)) omitted.add(n);
   }
   return [...omitted];

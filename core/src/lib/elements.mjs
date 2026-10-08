@@ -3,32 +3,27 @@
  *
  * Split decoded passage content into typed elements with exact `[start, end)`
  * spans, and prove the split is *reversible* (concatenating the element texts
- * reproduces the input byte-for-byte).
+ * reproduces the input byte-for-byte). The reversible check is what guarantees
+ * the span model can be trusted to rebuild the story exactly.
  *
  * Element kinds:
  *   comment   HTML comments and C-style block comments
- *   macro     << ... >>
+ *   macro     << ... >>          (quote-aware: `>>` in a string does not close)
+ *   code      <<script>> ... <</script>>  (a whole JS block, never exported)
  *   link      [[ ... ]]
  *   html      <tag ...>  </tag>  &entity;
  *   variable  $var / _var / ${expr}  (dotted / indexed access)
  *   text      everything else
  *
- * The reversible check is what guarantees the span model can be trusted to
- * rebuild the story exactly.
+ * Identifier and variable boundaries come from `structure-tokens.mjs`, which
+ * the V3 guard uses too. That shared grammar is why `foo_bar` is a single
+ * identifier in both the source and an arbitrary target language: the old rule
+ * cut `_bar` out of `foo_bar` in the inventory, but the guard's ASCII
+ * lookbehind did not, so a structurally faithful translation could be rejected
+ * while the half-protected `foo` remained translatable (a real break).
  */
 
-const TOKEN_RE = new RegExp([
-  String.raw`<!--[\s\S]*?-->`,
-  String.raw`/\*[\s\S]*?\*/`,
-  String.raw`<<[\s\S]*?>>`,
-  String.raw`\[\[[\s\S]*?\]\]`,
-  String.raw`<\/?[A-Za-z][^>]*>`,
-  String.raw`&[a-zA-Z][a-zA-Z0-9]*;`,
-  String.raw`&#\d+;`,
-  String.raw`&#x[0-9a-fA-F]+;`,
-  String.raw`\$\{[^}]*\}`,
-  String.raw`[$_][A-Za-z_][A-Za-z0-9_$]*(?:\.[A-Za-z_][A-Za-z0-9_$]*|\[[^\]\n]*\])*`,
-].join('|'), 'g');
+import { scanMacroEnd, scanTagEnd, isIdentifierChar, VAR_SOURCE } from './structure-tokens.mjs';
 
 // Macros that end a natural-language payload (block / control-flow / code).
 const FLUSH_MACROS = new Set([
@@ -41,11 +36,40 @@ const FLUSH_MACROS = new Set([
   'listbox', 'option', 'textbox', 'checkbox', 'radiobutton', 'note', 'tooltip',
 ]);
 
-// Macros whose first quoted argument is shown to the player.
-export const DISPLAY_MACROS = new Set([
-  'link', 'linkappend', 'linkprepend', 'linkreplace', 'button', 'cycle',
-  'listbox', 'option', 'textbox', 'checkbox', 'radiobutton', 'note', 'tooltip',
+/**
+ * Macros whose first quoted argument is shown to the player.
+ * `listbox`/`cycle`/`textbox`/`checkbox`/`radiobutton` are deliberately absent:
+ * their first argument is the *variable* the control binds to
+ * (`<<listbox "_crOverrides.legFrontPosition" autoselect>>`), never a label.
+ */
+export const LABEL_ARG_MACROS = new Set([
+  'link', 'linkappend', 'linkprepend', 'linkreplace', 'button', 'note',
+  'tooltip', 'option',
 ]);
+
+/** Form controls: first argument is a variable name, not display text. */
+export const FORM_CONTROL_MACROS = new Set([
+  'listbox', 'cycle', 'textbox', 'checkbox', 'radiobutton',
+]);
+
+/** Every macro whose payload stops at the macro (block / control / label). */
+export const DISPLAY_MACROS = new Set([...LABEL_ARG_MACROS, ...FORM_CONTROL_MACROS]);
+
+/**
+ * Macros whose body is SugarCube/JavaScript code rather than markup. Their
+ * text is never exported wholesale; only the player-facing strings declared by
+ * `DISPLAY_STRING_KEYS` are lifted out (see `inventory.mjs`).
+ */
+export const CODE_BODY_MACROS = new Set([
+  'set', 'unset', 'capture', 'remember', 'forget', 'run', 'init',
+]);
+
+/**
+ * Macros whose argument is printed to the player: `<<print EXPR>>`, `<<= EXPR>>`
+ * and `<<- EXPR>>`. Every string literal in the body is shown, so the whole
+ * body is a display context.
+ */
+export const OUTPUT_MACROS = new Set(['print', '=', '-']);
 
 // Block-level HTML tags end a payload; inline tags stay inside as placeholders.
 const BLOCK_TAGS = new Set([
@@ -64,36 +88,180 @@ export function isBlockHtml(raw) {
 
 const MACRO_CODE = FLUSH_MACROS;
 
+const ENTITY_RE = /^&(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#[xX][0-9a-fA-F]+);/;
+const SCRIPT_CLOSE_RE = /<{2}\s*(?:\/\s*script|endscript)\s*>{2}/gi;
+
+function macroNameOf(raw) {
+  return (raw.slice(2, -2).trim().split(/[\s(]/)[0] || '').toLowerCase();
+}
+
 function classify(raw) {
-  const c = raw[0];
   if (raw.startsWith('<!--') || raw.startsWith('/*')) return 'comment';
   if (raw.startsWith('<<')) return 'macro';
   if (raw.startsWith('[[')) return 'link';
-  if (raw.startsWith('&')) return 'html';
-  if (c === '<') return 'html';
-  if (c === '$' || c === '_') return 'variable';
+  if (raw[0] === '&') return 'html';
+  if (raw[0] === '<') return 'html';
+  if (raw[0] === '$' || raw[0] === '_') return 'variable';
   return 'text';
 }
 
-/** Split decoded content into typed elements with exact spans. */
+/** End of the `<<script>>` block whose header ends at `openEnd`, or -1. */
+function scriptBlockEnd(content, openEnd) {
+  SCRIPT_CLOSE_RE.lastIndex = openEnd;
+  const m = SCRIPT_CLOSE_RE.exec(content);
+  return m ? { closeStart: m.index, closeEnd: m.index + m[0].length } : null;
+}
+
+/** End of a `${ ... }` template hole starting at `i` (at `$`), or -1. */
+function scanHoleEnd(content, i) {
+  if (content[i] !== '$' || content[i + 1] !== '{') return -1;
+  let depth = 1;
+  let j = i + 2;
+  while (j < content.length) {
+    const c = content[j];
+    if (c === '"' || c === "'" || c === '`') {
+      const q = c;
+      j += 1;
+      let closed = false;
+      while (j < content.length) {
+        if (content[j] === '\\') { j += 2; continue; }
+        if (content[j] === q) { closed = true; j += 1; break; }
+        j += 1;
+      }
+      if (!closed) return -1;
+      continue;
+    }
+    if (c === '{') depth += 1;
+    else if (c === '}') {
+      depth -= 1;
+      if (depth === 0) return j + 1;
+    }
+    j += 1;
+  }
+  return -1;
+}
+
+/**
+ * Split decoded content into typed elements with exact spans.
+ * Always covers `[0, content.length)` exactly once, so `isReversible` holds by
+ * construction for any input (a scanner bug shows up as a failed reversibility
+ * report, never as silently dropped story text).
+ */
 export function tokenize(content) {
   const elements = [];
-  let last = 0;
-  TOKEN_RE.lastIndex = 0;
-  let m;
-  while ((m = TOKEN_RE.exec(content)) !== null) {
-    if (m.index > last) {
-      elements.push({ kind: 'text', start: last, end: m.index, text: content.slice(last, m.index) });
+  let i = 0;
+  let textStart = 0;
+
+  const pushText = (end) => {
+    if (end > textStart) {
+      elements.push({ kind: 'text', start: textStart, end, text: content.slice(textStart, end) });
     }
-    const raw = m[0];
-    const kind = classify(raw);
-    const el = { kind, start: m.index, end: m.index + raw.length, text: raw };
-    if (kind === 'macro') el.name = (raw.slice(2, -2).trim().split(/[\s(]/)[0] || '').toLowerCase();
-    elements.push(el);
-    last = m.index + raw.length;
-    if (raw.length === 0) TOKEN_RE.lastIndex += 1; // guard against empty match
+  };
+  const pushElement = (el) => { pushText(el.start); elements.push(el); textStart = el.end; };
+
+  while (i < content.length) {
+    const c = content[i];
+
+    if (c === '<') {
+      if (content.startsWith('<!--', i)) {
+        const close = content.indexOf('-->', i + 4);
+        const end = close < 0 ? content.length : close + 3;
+        pushElement({ kind: 'comment', start: i, end, text: content.slice(i, end) });
+        i = end;
+        continue;
+      }
+      if (content.startsWith('<<', i)) {
+        let fallback = false;
+        let end = scanMacroEnd(content, i);
+        if (end < 0) {
+          const naive = content.indexOf('>>', i + 2);
+          end = naive < 0 ? -1 : naive + 2;
+          fallback = end > i;
+        }
+        if (end > i) {
+          const raw = content.slice(i, end);
+          const name = macroNameOf(raw);
+          const isClose = /^<{2}\s*\//.test(raw);
+          if (name === 'script' && !isClose) {
+            const block = scriptBlockEnd(content, end);
+            const blockEnd = block ? block.closeEnd : content.length;
+            pushElement({
+              kind: 'code',
+              start: i,
+              end: blockEnd,
+              text: content.slice(i, blockEnd),
+              name: 'script',
+              bodyStart: end,
+              bodyEnd: block ? block.closeStart : content.length,
+              closed: Boolean(block),
+            });
+            i = blockEnd;
+            continue;
+          }
+          pushElement({
+            kind: 'macro',
+            start: i,
+            end,
+            text: raw,
+            name,
+            isClose,
+            fallback,
+            bodyStart: i + 2,
+            bodyEnd: end - 2,
+          });
+          i = end;
+          continue;
+        }
+      }
+      if (/^<\/?[A-Za-z]/.test(content.slice(i, i + 3))) {
+        const end = scanTagEnd(content, i);
+        if (end > i) {
+          pushElement({ kind: 'html', start: i, end, text: content.slice(i, end) });
+          i = end;
+          continue;
+        }
+      }
+    } else if (c === '[' && content[i + 1] === '[') {
+      const close = content.indexOf(']]', i + 2);
+      const end = close < 0 ? content.length : close + 2;
+      pushElement({ kind: 'link', start: i, end, text: content.slice(i, end) });
+      i = end;
+      continue;
+    } else if (c === '&') {
+      const m = ENTITY_RE.exec(content.slice(i, i + 32));
+      if (m) {
+        const end = i + m[0].length;
+        pushElement({ kind: 'html', start: i, end, text: content.slice(i, end) });
+        i = end;
+        continue;
+      }
+    } else if (c === '/' && content[i + 1] === '*') {
+      const close = content.indexOf('*/', i + 2);
+      const end = close < 0 ? content.length : close + 2;
+      pushElement({ kind: 'comment', start: i, end, text: content.slice(i, end) });
+      i = end;
+      continue;
+    } else if (c === '$' && content[i + 1] === '{') {
+      const end = scanHoleEnd(content, i);
+      if (end > i) {
+        pushElement({ kind: 'variable', start: i, end, text: content.slice(i, end) });
+        i = end;
+        continue;
+      }
+    } else if ((c === '$' || c === '_') && !isIdentifierChar(content[i - 1])) {
+      const re = new RegExp(VAR_SOURCE, 'y');
+      re.lastIndex = i;
+      const m = re.exec(content);
+      if (m && m[0].length > 0) {
+        const end = i + m[0].length;
+        pushElement({ kind: 'variable', start: i, end, text: content.slice(i, end) });
+        i = end;
+        continue;
+      }
+    }
+    i += 1;
   }
-  if (last < content.length) elements.push({ kind: 'text', start: last, end: content.length, text: content.slice(last) });
+  pushText(content.length);
   return elements;
 }
 
@@ -144,7 +312,7 @@ export function linkLabel(el) {
 
 /** First quoted string argument of a display macro, or undefined. */
 export function macroLabel(el) {
-  if (el.kind !== 'macro' || !DISPLAY_MACROS.has(el.name)) return undefined;
+  if (el.kind !== 'macro' || !LABEL_ARG_MACROS.has(el.name)) return undefined;
   const body = el.text.slice(2, -2);
   const nameMatch = /^\s*([^\s(]+)/.exec(body);
   const nameLen = nameMatch ? nameMatch[0].length : 0;

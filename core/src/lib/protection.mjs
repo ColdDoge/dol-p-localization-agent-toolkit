@@ -16,6 +16,8 @@
  * compiler. Findings carry stable codes so later work can whitelist or regress.
  */
 
+import { collectVariables as extractVariables } from './structure-tokens.mjs';
+
 const HARD = 'hard';
 const STRUCTURAL = 'structural';
 const SOFT = 'soft';
@@ -96,7 +98,6 @@ const MACRO_RE = /<{2}\s*(\/?)([A-Za-z_][A-Za-z0-9_-]*|=[-]?|-)([\s\S]*?)>{2}/g;
 const LINK_RE = /\[\[([\s\S]*?)\]\]/g;
 const HTML_TAG_RE = /<\/?([A-Za-z][A-Za-z0-9-]*)((?:\s+[^<>]*?)?)\/?>/g;
 const HTML_ATTR_RE = /([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>=`]+))/g;
-const VAR_RE = /(?<![\w$])[$_][A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_$]+|\[[^\]]+\])*/g;
 const TEMPLATE_HOLE_RE = /\$\{[^}]*\}/g;
 const PRINTF_RE = /%(?:\d+\$)?[sdif]/g;
 
@@ -173,14 +174,6 @@ export function extractLinkTargets(text) {
     targets.push(norm(target));
   }
   return targets;
-}
-
-function extractVariables(text) {
-  const out = [];
-  VAR_RE.lastIndex = 0;
-  let m;
-  while ((m = VAR_RE.exec(text)) !== null) out.push(m[0].replace(/\s+/g, ''));
-  return out;
 }
 
 function extractTemplateHoles(text) {

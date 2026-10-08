@@ -81,7 +81,7 @@ function prepare(storyPath, sourceVersion) {
   const { byName } = indexStory(story);
   const inv = buildInventory(story, { sourceVersion: sourceVersion || 'unknown' });
   const byUnitId = new Map(inv.units.map((u) => [u.unitId, u]));
-  return { story, byName, units: inv.units, stats: inv.stats, byUnitId };
+  return { story, byName, units: inv.units, stats: inv.stats, issues: inv.issues, byUnitId };
 }
 
 function loadRecords(story, units, { stateFile, localizationFile }) {
@@ -108,17 +108,20 @@ function readGlossary(file) {
 function cmdInventory() {
   const storyPath = arg('story');
   const out = arg('out');
-  const { story, units, stats } = prepare(storyPath, arg('source-version'));
+  const { story, units, stats, issues } = prepare(storyPath, arg('source-version'));
   const result = {
     generatedAt: nowIso(),
     sourceVersion: arg('source-version') || null,
     story: { sha256: story.sha256, bytes: story.size, passages: story.passages.length },
     stats,
     unitCount: units.length,
+    // Structures we deliberately did not export as translation units so the
+    // gap is reviewable instead of silent (see docs/PROTECTION-RULES.md).
+    issues,
     units: units.map((u) => ({
       unitId: u.unitId, passage: u.passage, kind: u.kind, family: u.family,
       riskLevel: u.riskLevel, startOffset: u.startOffset, endOffset: u.endOffset,
-      rawText: u.rawText, protectedText: u.protectedText,
+      origin: u.origin, rawText: u.rawText, protectedText: u.protectedText,
     })),
   };
   if (out) { writeJson(out, result); process.stdout.write(`inventory: ${units.length} units -> ${rel(out)}\n`); }

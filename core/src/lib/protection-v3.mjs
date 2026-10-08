@@ -14,8 +14,8 @@
 import { extractMacros, extractLinkTargets, SOFT_MACROS } from './protection.mjs';
 import { CONDITIONAL_OPEN, CONDITIONAL_BRANCH, CONDITIONAL_CLOSE, BLOCK_MACROS_V3 } from './protection-v3-blocks.mjs';
 import { CONTEXT_WRITING_MACROS, equivalentSignatures, signatureOf } from './context-semantics.mjs';
+import { collectVariables } from './structure-tokens.mjs';
 
-const VAR_RE = /(?<![\w$])[$_][A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_$]+|\[[^\]]+\])*/g;
 const TEMPLATE_HOLE_RE = /\$\{[^}]*\}/g;
 const HTML_TAG_RE = /<\/?([A-Za-z][A-Za-z0-9-]*)((?:\s+[^<>]*?)?)\/?>/g;
 const SPLIT = ' \u0001 ';
@@ -42,9 +42,6 @@ function diffMultiset(a, b) {
   return { added, removed };
 }
 
-function collectVariables(text) {
-  return (String(text || '').match(VAR_RE) || []).map((s) => s.replace(/\s+/g, ''));
-}
 function collectHoles(text) {
   return (String(text || '').match(TEMPLATE_HOLE_RE) || []).map((s) => stripQuoted(s).replace(/\s+/g, ''));
 }
@@ -190,7 +187,12 @@ export function compareStructures(from, to, { allow = [], allowPronounOmission =
   const a = parseStructure(from);
   const b = parseStructure(to);
 
-  if (a.balance.depth !== 0 || b.balance.depth !== 0 || a.balance.min !== b.balance.min) {
+  // Balance is compared between the two sides, not against zero: a unit may be
+  // a *fragment* that legitimately starts or ends inside a conditional (a
+  // display string embedded in game code), in which case the source itself is
+  // unbalanced. What must never change is the shape the translation sees, so
+  // any asymmetry in depth or in the lowest point still blocks.
+  if (a.balance.depth !== b.balance.depth || a.balance.min !== b.balance.min) {
     push('MACRO_BALANCE_CHANGED', `fromDepth=${a.balance.depth} toDepth=${b.balance.depth} fromMin=${a.balance.min} toMin=${b.balance.min}`);
   }
 

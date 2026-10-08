@@ -92,3 +92,27 @@ export function makeFixtureWith(count) {
   const byUnitId = new Map(inv.units.map((u) => [u.unitId, u]));
   return { dir, storyPath, story, byName, units: inv.units, byUnitId };
 }
+
+/**
+ * Build a story from explicit `[name, content]` pairs. Synthetic only — every
+ * caller is responsible for not putting real game text in here.
+ */
+export function makeStory(passages) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'toolkit-test-'));
+  const storyPath = path.join(dir, 'index.html');
+  const body = passages.map(([name, content], i) => (
+    `<tw-passagedata pid="${i + 1}" name="${name}" tags="" position="${(i + 1) * 100},100">${content}</tw-passagedata>`
+  )).join('\n');
+  fs.writeFileSync(storyPath, `<!DOCTYPE html><html><head><title>fixture</title></head><body>
+<tw-storydata name="selftest" startnode="1" creator="selftest" creator-version="1.0" format="SugarCube" format-version="2.36.1" ifid="11111111-2222-3333-4444-555555555555">
+<style role="stylesheet" id="twine-user-stylesheet" type="text/twine-css"></style>
+<script role="script" id="twine-user-script" type="text/twine-javascript"></script>
+${body}
+</tw-storydata></body></html>
+`);
+  const story = parseStory(storyPath);
+  const { byName } = indexStory(story);
+  const inv = buildInventory(story, { sourceVersion: 'test' });
+  const byUnitId = new Map(inv.units.map((u) => [u.unitId, u]));
+  return { dir, storyPath, story, byName, units: inv.units, byUnitId, issues: inv.issues, stats: inv.stats };
+}
