@@ -12,7 +12,7 @@
  * filesystem, a device, or a model.
  */
 
-import { compareStructures } from './protection-v3.mjs';
+import { compareStructures, placeholderDomain } from './protection-v3.mjs';
 import { CONTEXT_WRITING_MACROS } from './context-semantics.mjs';
 import { SOFT_MACROS } from './protection.mjs';
 import { contextDelimiterFindings } from './structure-tokens.mjs';
@@ -149,7 +149,18 @@ export function verifyEntry({ protectedText, placeholders, translatedProtected, 
   findings.push(...contextDelimiterFindings(context, fromRaw, toRaw));
 
   let structural = { blocking: [], findings: [] };
-  try { structural = compareStructures(fromRaw, toRaw, { allow, allowPronounOmission: omissions }); } catch (e) { findings.push({ code: 'V3_ERROR', detail: String(e && e.message) }); }
+  try {
+    // Compare in the placeholder-aware domain: a variable restored from a
+    // placeholder must not lose its identifier boundary just because the
+    // translation puts a CJK character directly in front of it (see
+    // `placeholderDomain` in protection-v3.mjs). With no placeholders the
+    // domain *is* the raw text, so a plain unit behaves exactly as before.
+    structural = compareStructures(
+      placeholderDomain(protectedText, placeholders),
+      placeholderDomain(translatedProtected, placeholders),
+      { allow, allowPronounOmission: omissions },
+    );
+  } catch (e) { findings.push({ code: 'V3_ERROR', detail: String(e && e.message) }); }
   for (const b of structural.blocking || []) findings.push({ code: `V3_${b.code}`, detail: b.detail });
 
   const codes = [...new Set(findings.map((f) => f.code))];

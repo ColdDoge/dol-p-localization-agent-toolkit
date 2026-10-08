@@ -19,6 +19,43 @@ import { collectVariables, collectTemplateHoles, stripQuotedText as stripQuoted 
 const HTML_TAG_RE = /<\/?([A-Za-z][A-Za-z0-9-]*)((?:\s+[^<>]*?)?)\/?>/g;
 const SPLIT = ' \u0001 ';
 
+/**
+ * Non-identifier sentinel wrapped around every restored placeholder in the V3
+ * domain. It gives a restored token back its identifier boundary without
+ * hiding it from the scans below.
+ */
+const DOMAIN_BOUNDARY = '\u0002';
+
+/**
+ * Build the text V3 compares, from a *protected* payload plus its placeholders.
+ *
+ * `verifyEntry` restores the placeholders before comparing, so a variable
+ * comes back as its original source (`$worn.face.name`, `_painting`, …) — and
+ * `collectVariables` requires an identifier boundary in front of it. A
+ * faithful translation that puts the variable where Chinese needs it
+ * (`墙上贴满了_furniture.wallpaper.name的画像。`) leaves a CJK letter in front,
+ * the boundary check fails, and the guard reports the variable as removed.
+ * The answer ended up depending on the target language, which is exactly what
+ * the shared token grammar exists to avoid.
+ *
+ * Wrapping each restored placeholder in {@link DOMAIN_BOUNDARY} fixes that
+ * without weakening anything: the token is still in the text (so the branch,
+ * macro, link and HTML scans keep seeing it) and it is now always preceded by
+ * a non-identifier character. Translated text outside a placeholder is not
+ * wrapped, so a `$variable` or `<<macro>>` a translation *adds* is still
+ * caught, and a unit with no placeholders is returned unchanged — the
+ * identifier rule (`foo_bar` is one identifier, not `foo` + a `_bar` variable)
+ * keeps its meaning.
+ */
+export function placeholderDomain(protectedText, placeholders) {
+  let out = String(protectedText == null ? '' : protectedText);
+  for (const ph of placeholders || []) {
+    if (!ph || !ph.placeholder) continue;
+    out = out.split(ph.placeholder).join(`${DOMAIN_BOUNDARY}${ph.raw}${DOMAIN_BOUNDARY}`);
+  }
+  return out;
+}
+
 const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 const withoutMacros = (t) => String(t || '').replace(/<{2}[\s\S]*?>{2}/g, SPLIT);
 

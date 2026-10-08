@@ -55,6 +55,15 @@ between the source and the translation rather than against zero, because a unit
 may legitimately be a fragment of a surrounding conditional; any asymmetry in
 depth or in the lowest point still blocks.
 
+The comparison runs on a **placeholder-aware domain**: each `⟦n⟧` is re-expanded
+to the text it protects and wrapped in a non-identifier sentinel
+(`protection-v3.mjs` → `placeholderDomain`). That keeps a restored variable's
+identifier boundary independent of the target language — a Chinese translation
+may write a variable directly after a CJK character without being reported as
+`VARIABLE_CHANGED` — while the token itself stays in the compared text, so no
+scan loses anything. Text outside a placeholder is never wrapped, so a variable
+or macro a translation *adds* is still caught.
+
 ## Codes
 
 `PLACEHOLDER_COUNT_CHANGED`, `PLACEHOLDER_MISMATCH`,

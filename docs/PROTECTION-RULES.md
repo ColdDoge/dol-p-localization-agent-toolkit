@@ -15,6 +15,18 @@ model or a device.
    match. This catches a dropped/added/moved/swapped macro, variable, link
    target, or HTML tag, including moves across an `<<if>>` branch.
 
+   V3 compares a **placeholder-aware domain**: every `⟦n⟧` is re-expanded to
+   the text it protects, wrapped in a non-identifier sentinel. A variable that
+   came from a placeholder therefore keeps its identifier boundary no matter
+   what the translation puts next to it. Without this, a faithful Chinese
+   translation that writes a variable right after a CJK character
+   (`墙上贴满了_furniture.wallpaper.name的画像。`) left no boundary in front of
+   the restored variable and was reported as `VARIABLE_CHANGED`. The
+   sentinel only supplies a boundary: the token stays in the compared text, so
+   the branch, macro, link and HTML scans still see it. Text the translation
+   adds *outside* a placeholder is never wrapped, and a unit without
+   placeholders is compared as its raw self.
+
 ## Registered pronoun omissions
 
 Some target languages legitimately drop pronoun macros the source spelled out.
