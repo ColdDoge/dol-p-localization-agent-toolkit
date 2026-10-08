@@ -1,0 +1,54 @@
+name: Deploy translation editor to GitHub Pages
+
+# Publishes a minimal site: a landing page plus the self-contained editor HTML.
+# `actions/configure-pages` with `enablement: true` turns Pages on the first
+# time this runs, so no repository setting has to be toggled by hand.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Enable and configure GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Stage the site
+        run: |
+          mkdir -p _site
+          cp dolp-kit-translation-editor.html _site/dolp-kit-translation-editor.html
+          cp .github/pages/index.html _site/index.html
+          ls -l _site
+
+      - name: Upload the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

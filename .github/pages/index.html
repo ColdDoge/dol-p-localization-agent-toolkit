@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>DoL / DoLP 网页翻译编辑器 · Translation Editor</title>
+  <style>
+    :root { font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif; color-scheme: light; }
+    body { margin: 0; background: #f4f6f8; color: #1c2b35; }
+    main { max-width: 760px; margin: 0 auto; padding: 56px 22px 72px; }
+    h1 { font-size: clamp(24px, 4vw, 34px); margin: 0 0 10px; letter-spacing: -.02em; }
+    h2 { font-size: 18px; margin: 34px 0 8px; }
+    p { line-height: 1.75; color: #4a5b66; }
+    a.cta { display: inline-flex; gap: 9px; align-items: center; margin: 20px 10px 0 0; padding: 14px 20px;
+      border-radius: 12px; background: #356d88; color: #fff; text-decoration: none; font-weight: 700; }
+    a.cta.alt { background: transparent; color: #356d88; border: 1px solid #b8cdd9; }
+    ul { line-height: 1.95; color: #4a5b66; }
+    code { background: #e7f0f5; padding: 1px 5px; border-radius: 5px; font-family: Consolas, monospace; font-size: .92em; }
+    .note { margin-top: 26px; padding: 13px 15px; background: #e7f0f5; border: 1px solid #bfd4df;
+      border-radius: 12px; color: #315c72; font-size: 13px; line-height: 1.7; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #151d22; color: #eaf2f5; }
+      p, ul { color: #a0b1bc; }
+      a.cta { background: #4088aa; }
+      a.cta.alt { color: #76b9d7; border-color: #3c4c57; }
+      code { background: #253d4a; }
+      .note { background: #253d4a; border-color: #406073; color: #b7dceb; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>DoL / DoLP 网页翻译编辑器</h1>
+    <p>离线、单文件的本地翻译编辑器。用 Chrome / Edge 打开后导入 Toolkit 导出的
+      <code>localization-kit.zip</code>，填写译文、检查结构与占位符、标记校对状态，
+      再导出新的 ZIP / JSONL。所有文件只在你的浏览器里处理，<strong>不会上传网络</strong>，
+      也不生成译文。</p>
+    <p>
+      <a class="cta" href="./dolp-kit-translation-editor.html">打开翻译编辑器 →</a>
+      <a class="cta alt" href="https://github.com/ColdDoge/dol-p-localization-agent-toolkit">查看仓库 / Repository</a>
+    </p>
+
+    <h2>Features / 功能</h2>
+    <ul>
+      <li>自动保存与恢复、撤销 / 重做 · autosave with recovery points, undo / redo</li>
+      <li>安全检查、术语一致性、重复原文识别 · safety, terminology and duplicate-source checks</li>
+      <li>搜索与高级筛选、进度统计与状态标记 · search, advanced filters, progress and status marks</li>
+      <li>安全合并与冲突预览、新版本翻译迁移 · safe hand-off merge and new-version migration</li>
+      <li>顶部 / 底部同步分页（9 个居中页码 + 直接跳页） · shared top/bottom pagination with a jump box</li>
+      <li>中文 / English 界面 · Chinese / English UI</li>
+    </ul>
+
+    <h2>Guides / 使用说明</h2>
+    <ul>
+      <li><a href="https://github.com/ColdDoge/dol-p-localization-agent-toolkit/blob/main/docs/翻译编辑器使用指南.md">中文使用指南</a>
+        · <a href="https://github.com/ColdDoge/dol-p-localization-agent-toolkit/blob/main/docs/网页翻译工具使用指南.md">中文完整功能说明</a></li>
+      <li><a href="https://github.com/ColdDoge/dol-p-localization-agent-toolkit/blob/main/docs/KIT-EDITOR-GUIDE.en.md">English user guide</a>
+        · <a href="https://github.com/ColdDoge/dol-p-localization-agent-toolkit/blob/main/README.en.md">English README</a></li>
+    </ul>
+
+    <p class="note">提示：复制原文不等于完成翻译；内置检查是辅助工具，正式导入与发布仍需经过
+      Toolkit 的 <code>kit import</code> → <code>qa</code> → <code>strict build</code> 检查。
+      草稿与关键词词典保存在浏览器本地，请定期导出 ZIP 与词典 JSON 备份。</p>
+  </main>
+</body>
+</html>
