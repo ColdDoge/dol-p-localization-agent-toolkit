@@ -7,7 +7,11 @@ optionally validates localization data; **it does not generate translations**.
 面向 DoL / DoLP 及其他 SugarCube / ModI18N 目标的本地、离线优先汉化工程工具。
 它负责导出、检查、导入、构建、版本迁移与可选真机验证；**工具本身不生成译文**。
 
-**[项目介绍、开发初衷与致谢（中文全文） / Project background & acknowledgements](docs/项目介绍、开发初衷与致谢.md)** — 包括项目动机、完整功能概览、网页翻译工具、使用前提、参考项目与感谢名单。
+**Project background, motivation & acknowledgements / 项目介绍、开发初衷与致谢**
+
+[English full text](docs/PROJECT-BACKGROUND-AND-ACKNOWLEDGEMENTS.en.md) · [中文全文](docs/项目介绍、开发初衷与致谢.md)
+
+功能与开发动机、网页翻译编辑器、使用前提、参考项目和完整致谢 / Features, project motivation, browser-based translation editor, requirements, references, and acknowledgements.
 
 ## 📝 Translation editor / 可视化翻译编辑器
 
