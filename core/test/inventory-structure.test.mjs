@@ -156,6 +156,50 @@ test('unparsable code soup is reported as a pending issue, not exported', () => 
   assert.equal(leaked.length, 0, JSON.stringify(leaked.map((u) => u.rawText)));
 });
 
+test('a macro inside a link label does not truncate the enclosing macro', () => {
+  // `<<link [[Compliment <<him>>|Target]]>>` is a real DoL idiom. A naive
+  // first-`>>` scan closed the `link` macro at the `>>` of `<<him>>`, spilling
+  // the tail `|Target]]>>` into translatable text and losing the label.
+  const inv = makeStory([
+    ['Nested', 'You share the cookie.\n<<link [[Compliment <<him>>|Poppy Compliment]]>><<set $x += 1>><</link>>\n'],
+  ]);
+  const labels = unitsOf(inv, 'Nested').filter((u) => u.kind === 'link_label');
+  assert.equal(labels.length, 1, JSON.stringify(unitsOf(inv, 'Nested').map((u) => [u.kind, u.rawText])));
+  assert.equal(labels[0].protectedText, 'Compliment \u27e60\u27e7');
+  assert.equal(labels[0].placeholders[0].raw, '<<him>>');
+  // No raw markup may survive inside a translatable payload: it would be
+  // unprotected, so a translation could destroy it.
+  for (const u of inv.units) {
+    const payload = u.protectedText.replace(PLACEHOLDER_RE, ' ');
+    assert.ok(!/<<|>>|\[\[|\]\]/.test(payload), `leaked structure: ${JSON.stringify(u.rawText)}`);
+  }
+});
+
+test('nested link markup and array literals keep the macro span balanced', () => {
+  assert.equal(tokenize('<<link [[Go|Target]]>>text<</link>>').map((e) => e.text).join(''),
+    '<<link [[Go|Target]]>>text<</link>>');
+  const els = tokenize('<<set _grid to [[1,2],[3,4]]>>text');
+  assert.equal(els[0].kind, 'macro');
+  assert.equal(els[0].text, '<<set _grid to [[1,2],[3,4]]>>');
+  // An unbalanced `[[` falls back to the naive close instead of swallowing the
+  // rest of the passage.
+  assert.equal(tokenize('<<print "a" [[ oops\nrest of the passage').map((e) => e.text).join(''),
+    '<<print "a" [[ oops\nrest of the passage');
+});
+
+test('prose that still carries raw structure is not exported', () => {
+  const inv = makeStory([
+    ['Broken', 'The lorry has stopped>> and then the scene continues normally.\n'],
+  ]);
+  assert.equal(unitsOf(inv, 'Broken').length, 0);
+  assert.ok(inv.issues.some((i) => i.code === 'passage-text-unparsed'), JSON.stringify(inv.issues));
+});
+
+test('ordinary prose with a single ">" or a bare "$5" stays exported', () => {
+  const inv = makeStory([['Fine', 'The sign reads exit > here, and the fare is $5 today.\n']]);
+  assert.equal(unitsOf(inv, 'Fine').length, 1);
+});
+
 // ---------------------------------------------------------------------------
 // C. round trip: export -> fill -> import
 // ---------------------------------------------------------------------------

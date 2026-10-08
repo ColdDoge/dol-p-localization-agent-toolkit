@@ -138,6 +138,15 @@ export function scanMacroEnd(text, i) {
         continue;
       }
     }
+    // Link markup inside a macro body may itself contain macros
+    // (`<<link [[Compliment <<him>>|Target]]>>`). The `>>` of the inner macro
+    // must not close the outer one, so skip the whole `[[ … ]]` span. A `[[`
+    // with no closing `]]` is left to the normal scan so an unbalanced source
+    // still falls back to the naive close instead of swallowing the passage.
+    if (c === '[' && text[j + 1] === '[') {
+      const close = text.indexOf(']]', j + 2);
+      if (close >= 0) { j = close + 2; continue; }
+    }
     if (c === '>' && text[j + 1] === '>') return j + 2;
     j += 1;
   }

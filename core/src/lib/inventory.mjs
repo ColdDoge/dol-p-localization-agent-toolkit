@@ -297,7 +297,20 @@ export function buildInventory(story, { sourceVersion = 'unknown' } = {}) {
       if (runStart === null) return;
       const last = run[run.length - 1];
       const { protectedText, placeholders } = placeholdersOf(run);
-      if (looksLikeEnglish(englishPayload(protectedText, placeholders))) {
+      const payload = englishPayload(protectedText, placeholders);
+      if (looksLikeEnglish(payload)) {
+        // Structure left in the payload means this run could not be fully
+        // tokenised into placeholders. Exporting it would hand a translator a
+        // span that still contains raw markup (`>>`, `]]`, an unclosed tag, a
+        // stray variable) which no placeholder protects, so a faithful
+        // translation would silently destroy it. Same policy as code strings:
+        // record the gap as a pending issue instead of exporting it.
+        if (RESIDUAL_STRUCTURE_RE.test(payload)) {
+          recordIssue('passage-text-unparsed', p.name, runStart, JSON.stringify(payload.slice(0, 80)), 'text');
+          runStart = null;
+          run = [];
+          return;
+        }
         const d = depth[runIndex];
         const riskLevel = d > 0 ? 'L2' : placeholders.length > 0 ? 'L1' : 'L0';
         pushUnit('passage_text', runStart, last.end, p.content.slice(runStart, last.end), protectedText, placeholders, riskLevel);
