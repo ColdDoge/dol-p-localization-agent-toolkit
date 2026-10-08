@@ -21,16 +21,36 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      pages_enabled: ${{ steps.pages_check.outputs.enabled }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
 
+      - name: Check whether GitHub Pages is enabled
+        id: pages_check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages")
+          if [ "$code" = "200" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=GitHub Pages is not enabled::Enable it once in Settings > Pages (Build and deployment > Source = GitHub Actions), then re-run this workflow. Until then the site is not published."
+          fi
+
       - name: Enable and configure GitHub Pages
+        if: steps.pages_check.outputs.enabled == 'true'
         uses: actions/configure-pages@v5
         with:
           enablement: true
 
       - name: Stage the site
+        if: steps.pages_check.outputs.enabled == 'true'
         run: |
           mkdir -p _site
           cp dolp-kit-translation-editor.html _site/dolp-kit-translation-editor.html
@@ -38,12 +58,14 @@ jobs:
           ls -l _site
 
       - name: Upload the Pages artifact
+        if: steps.pages_check.outputs.enabled == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
   deploy:
     needs: build
+    if: needs.build.outputs.pages_enabled == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
