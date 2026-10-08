@@ -39,6 +39,7 @@ or tag raises a SugarCube error regardless.
 | flag | effect |
 | --- | --- |
 | `--backup` / `--no-backup` | run Paisley Park's app-data backup first (default: on) |
+| `--baseline` / `--no-baseline` | run the control pass (same scenes with no pack) first (default: on) |
 | `--inspect` / `--no-inspect` | capture screenshot / layout evidence via Paisley Park (default: off) |
 | `--keep-installed` | skip cleanup (debugging only) |
 
@@ -55,3 +56,30 @@ cleanup    = RESTORED / FAILED / SKIPPED
 Tier A asserts target text rendered and source text gone; tier C asserts only
 that the screen still works. Non-ASCII ratio and word counts are diagnostics and
 never affect the verdict.
+
+### Page-visible errors and the control pass
+
+The game can write error text straight into a passage (for example
+`[ERROR: undefined pronoun in "He"]` from a pronoun / `<<person>>` widget that
+has no target). That text is neither a `.error` node (so `bodyErrors` misses it)
+nor `<<macro>>` syntax (so the `rawMacro` leak misses it), so it needs its own
+detector.
+
+Before importing the pack, the harness runs the same scenes once with **no pack
+loaded** (the *control pass*) and keeps each scene's visible-error set as a
+baseline. A scene fails only on a **pack-introduced** visible error — one that
+did not appear in the control pass. Errors already present without the pack are
+recorded as `preExistingVisibleErrors` and never fail a scene, so a
+game/test-environment limitation (for example a pronoun widget with no target in
+the disposable session) is not misreported as a localization defect. The report
+keeps both lists (`visibleErrorsBaseline` per scene, then
+`preExistingVisibleErrors` / `introducedVisibleErrors`), plus the
+`visibleErrors` totals. `--no-baseline` skips the control pass; visible errors
+are still recorded, they are just not classified (and so never fail a scene).
+
+### Not covered (blocked) scenes
+
+A scenario marked `"blocked": true` (with an optional `blockedReason`) cannot be
+exercised without extra game state. It is never run and never counted as a pass:
+the offline builder records it in `expectations.json` (`blocked`), and the report
+lists it under `notCovered`.

@@ -10,7 +10,7 @@ import { parseStory, indexStory } from '../../../core/src/lib/story.mjs';
 import { buildInventory } from '../../../core/src/lib/inventory.mjs';
 import { restoreProtected } from '../../../core/src/lib/protect.mjs';
 import { sourceFingerprint, structuralKey, protectedHash } from '../../../core/src/lib/structure-cache.mjs';
-import { loadScenarioSpec, validateScenario } from '../lib/localization-scenarios.mjs';
+import { loadScenarioSpec, validateScenario, blockedScenarios, scenarioPassages } from '../lib/localization-scenarios.mjs';
 import { evaluateScenarioResult, scriptLocalizationScenario } from '../lib/localization-scripts.mjs';
 import { scenariosForRun } from '../test-localization-runtime.mjs';
 
@@ -84,6 +84,31 @@ test('language-agnostic evaluation: target present + source absent passes', () =
   const bad = evaluateScenarioResult(scenario, { requireMissing: [], bodyErrors: 0, leaks: {}, targetFound: [], sourcePresent: ['hello world'] });
   assert.equal(bad.ok, false);
   assert.ok(bad.failures.includes('no-expected-target-text'));
+});
+
+test('page-visible error: pre-existing does not fail, pack-introduced does', () => {
+  const scenario = { id: 'a', tier: 'A', label: 'l', passage: 'P', require: ['.passage'], expectTargetAny: ['xyzzy'], forbidSourceAny: ['hello'] };
+  const shared = { requireMissing: [], bodyErrors: 0, leaks: {}, targetFound: ['xyzzy'], sourcePresent: [] };
+  // A widget error already present without the pack is recorded, but not a failure.
+  const preExisting = evaluateScenarioResult(scenario, { ...shared, visibleErrors: ['[ERROR: undefined pronoun in "He"]'], preExistingVisibleErrors: ['[ERROR: undefined pronoun in "He"]'], introducedVisibleErrors: [] });
+  assert.equal(preExisting.ok, true, JSON.stringify(preExisting.failures));
+  // A visible error only seen with the pack is a real regression.
+  const introduced = evaluateScenarioResult(scenario, { ...shared, visibleErrors: ['[ERROR: undefined pronoun in "his"]'], preExistingVisibleErrors: [], introducedVisibleErrors: ['[ERROR: undefined pronoun in "his"]'] });
+  assert.equal(introduced.ok, false);
+  assert.ok(introduced.failures.some((f) => f.startsWith('visible-error-introduced:')));
+});
+
+test('blocked scenarios are excluded from pack passages and reported', () => {
+  const spec = {
+    scenarios: [
+      { id: 'ok', tier: 'A', label: 'l', passage: 'Keep', require: ['.passage'], expectTargetAny: ['x'], forbidSourceAny: ['y'] },
+      { id: 'blocked', tier: 'A', label: 'l', blocked: true, blockedReason: 'needs state', passage: 'Skip', expectTargetAny: ['x'], forbidSourceAny: ['y'], require: ['.passage'] },
+    ],
+    levels: { smoke: ['ok'], regression: ['ok'], exhaustive: ['ok'] },
+  };
+  assert.deepEqual(scenarioPassages(spec), ['Keep']);
+  assert.deepEqual(blockedScenarios(spec), [{ id: 'blocked', reason: 'needs state', passage: 'Skip' }]);
+  assert.deepEqual(validateScenario(spec.scenarios[1]), []);
 });
 
 test('tier C ignores residual source text', () => {

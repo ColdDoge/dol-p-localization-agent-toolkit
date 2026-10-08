@@ -42,16 +42,17 @@ export function loadScenarioSpec(file) {
 export function validateScenario(scenario) {
   const problems = [];
   if (!scenario || typeof scenario !== 'object') return ['scenario is not an object'];
+  const blocked = scenario.blocked === true;
   if (!scenario.id) problems.push('missing id');
   if (!LOCALIZATION_TIERS.includes(scenario.tier)) problems.push(`bad tier ${scenario.tier}`);
   if (!scenario.label) problems.push('missing label');
   if (!scenario.passage && !scenario.overlay) problems.push('needs passage or overlay');
   if (!Array.isArray(scenario.require) || scenario.require.length === 0) problems.push('missing require[]');
-  if (scenario.tier === 'A') {
+  if (scenario.tier === 'A' && !blocked) {
     if (!Array.isArray(scenario.expectTargetAny) || scenario.expectTargetAny.length === 0) problems.push('tier A needs expectTargetAny[]');
     if (!Array.isArray(scenario.forbidSourceAny)) problems.push('tier A needs forbidSourceAny[]');
   }
-  if (scenario.tier === 'C' && (scenario.expectTargetAny || scenario.forbidSourceAny)) {
+  if (scenario.tier === 'C' && !blocked && (scenario.expectTargetAny || scenario.forbidSourceAny)) {
     problems.push('tier C must not assert translated text');
   }
   if (scenario.interaction && scenario.interaction.kind === 'search') {
@@ -63,6 +64,22 @@ export function validateScenario(scenario) {
     }
   }
   return problems;
+}
+
+/**
+ * A blocked scenario cannot be exercised safely on the current target (it
+ * needs game state the disposable test session does not establish). It is
+ * recorded as NOT COVERED and never run, so it can never be counted as a pass.
+ */
+export function isBlockedScenario(scenario) {
+  return Boolean(scenario && scenario.blocked === true);
+}
+
+/** Blocked scenarios, with their reason, for the report's "not covered" list. */
+export function blockedScenarios(spec) {
+  return (spec.scenarios || [])
+    .filter(isBlockedScenario)
+    .map((s) => ({ id: s.id, reason: s.blockedReason || null, passage: s.passage ?? null }));
 }
 
 export function getScenario(spec, id) {
@@ -82,5 +99,5 @@ export function scenariosForLevel(spec, level) {
 
 /** All passages the smoke pack must cover. */
 export function scenarioPassages(spec) {
-  return [...new Set((spec.scenarios || []).map((s) => s.passage).filter(Boolean))];
+  return [...new Set((spec.scenarios || []).filter((s) => !isBlockedScenario(s)).map((s) => s.passage).filter(Boolean))];
 }

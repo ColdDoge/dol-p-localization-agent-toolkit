@@ -47,6 +47,7 @@ export function parseArgs(argv) {
   const args = {
     level: 'exhaustive', story: null, state: null, package: null, scenarios: null,
     session: null, inspect: null, backup: null, json: false, keepInstalled: false, timeoutMs: 90000,
+    baseline: null,
     entryPassage: 'Start', setupPassage: 'Start2', readyFlag: 'intro', cheatWidget: '<<cheatStart>>',
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -61,6 +62,8 @@ export function parseArgs(argv) {
     else if (a === '--no-inspect') args.inspect = false;
     else if (a === '--backup') args.backup = true;
     else if (a === '--no-backup') args.backup = false;
+    else if (a === '--baseline') args.baseline = true;
+    else if (a === '--no-baseline') args.baseline = false;
     else if (a === '--keep-installed') args.keepInstalled = true;
     else if (a === '--json') args.json = true;
     else if (a === '--timeout') args.timeoutMs = Number(argv[++i]) || args.timeoutMs;
@@ -159,9 +162,11 @@ export async function runLocalizationRuntime(options, deps) {
     inspect: null,
     cleanup: null,
     restore: null,
+    notCovered: [],
+    visibleErrorsBaseline: null,
     stages: [],
     errors: [],
-    timings: { totalMs: null, preflightMs: null, backupMs: null, importMs: null, reloadMs: null, cleanupMs: null, scenarioMs: null },
+    timings: { totalMs: null, preflightMs: null, controlMs: null, backupMs: null, importMs: null, reloadMs: null, cleanupMs: null, scenarioMs: null },
     runtimeQa: 'FAILED',
     cleanupStatus: 'NOT_RUN',
   };
@@ -190,6 +195,9 @@ export async function runLocalizationRuntime(options, deps) {
     scenarioSource: picked.source,
     scenarioIds: scenarios.map((s) => s.id),
   };
+  // Scenes the offline builder marked BLOCKED (not exercisable on this target).
+  // They are reported as NOT COVERED and never run, so they can never be a pass.
+  report.notCovered = Array.isArray(expectations.blocked) ? expectations.blocked : [];
   const zipPath = path.resolve(REPO_ROOT, (expectations.pack && expectations.pack.path) || '');
   if (!expectations.pack || !fs.existsSync(zipPath)) {
     stage('preflight', false, 'smoke pack missing; run runtime/localization_smoke_build.mjs');
@@ -227,6 +235,35 @@ export async function runLocalizationRuntime(options, deps) {
   const ctrlOk = Boolean(snapBefore && Array.isArray(snapBefore.listModIndexDB));
   stage('baseline', ctrlOk, ctrlOk ? `list=${JSON.stringify(snapBefore.listModIndexDB)}` : 'ModLoader controller not readable');
   if (!ctrlOk) { report.finishedAt = deps.now().toISOString(); return report; }
+
+  const hooks = { entryPassage: options.entryPassage, setupPassage: options.setupPassage, readyFlag: options.readyFlag, cheatWidget: options.cheatWidget };
+
+  // ------------------------------------------------------------- control pass
+  // Visit the same scenes once with the pack NOT loaded, so a page-visible error
+  // that the game/test environment already produces (for example a pronoun
+  // widget with no target) is not mistaken for a pack-introduced regression.
+  // Only the visible-error set is used here; the tier assertions are irrelevant
+  // without the pack (source text is still English) and are not evaluated.
+  const c0 = deps.now().getTime();
+  const baselineVisible = {};
+  if (options.baseline !== false) {
+    for (const scenario of scenarios) {
+      try {
+        const r = await deps.evaluate(conn.endpoint, scriptLocalizationScenario(scenario, hooks));
+        baselineVisible[scenario.id] = Array.isArray(r && r.visibleErrors) ? r.visibleErrors : [];
+      } catch (error) {
+        baselineVisible[scenario.id] = null; // unknown baseline; never fail on it
+      }
+    }
+    report.visibleErrorsBaseline = baselineVisible;
+    const total = Object.values(baselineVisible).reduce((a, v) => a + (Array.isArray(v) ? v.length : 0), 0);
+    stage('control', true, `baseline visible errors: ${total} across ${scenarios.length} scene(s)`);
+  } else {
+    for (const scenario of scenarios) baselineVisible[scenario.id] = null;
+    report.visibleErrorsBaseline = null;
+    stage('control', true, 'skipped (--no-baseline)');
+  }
+  report.timings.controlMs = deps.now().getTime() - c0;
 
   if (options.backup !== false) {
     const b0 = deps.now().getTime();
@@ -277,7 +314,6 @@ export async function runLocalizationRuntime(options, deps) {
   if (!persisted) return cleanupPilot('pack not loaded');
 
   // ---------------------------------------------------------------- scenarios
-  const hooks = { entryPassage: options.entryPassage, setupPassage: options.setupPassage, readyFlag: options.readyFlag, cheatWidget: options.cheatWidget };
   const s0 = deps.now().getTime();
   const results = [];
   for (const scenario of scenarios) {
@@ -287,6 +323,23 @@ export async function runLocalizationRuntime(options, deps) {
       results.push({ id: scenario.id, tier: scenario.tier, fatal: String(error && error.message || error) });
     }
   }
+  // Classify page-visible errors: one the control pass already produced is a
+  // pre-existing game/environment limitation; one only present with the pack is
+  // a regression. Nothing is hidden — both lists stay in the report.
+  let introducedTotal = 0;
+  let preExistingTotal = 0;
+  for (const r of results) {
+    if (!r || typeof r !== 'object') continue;
+    const packed = Array.isArray(r.visibleErrors) ? r.visibleErrors : [];
+    const base = baselineVisible[r.id];
+    if (!Array.isArray(base)) { r.visibleErrorsBaselineMissing = true; continue; }
+    const baseSet = new Set(base);
+    r.preExistingVisibleErrors = packed.filter((e) => baseSet.has(e));
+    r.introducedVisibleErrors = packed.filter((e) => !baseSet.has(e));
+    introducedTotal += r.introducedVisibleErrors.length;
+    preExistingTotal += r.preExistingVisibleErrors.length;
+  }
+  report.visibleErrors = { preExisting: preExistingTotal, introduced: introducedTotal };
   report.localization = summarizeLocalization(scenarios, results);
   report.timings.scenarioMs = deps.now().getTime() - s0;
   stage('scenarios', report.localization.ok, report.localization.ok ? `A ${report.localization.tierA.passed}/${report.localization.tierA.total} · C ${report.localization.tierC.passed}/${report.localization.tierC.total}` : `failed: ${report.localization.failed.join(',')}`);
@@ -344,6 +397,10 @@ function printSummary(report) {
     for (const e of report.localization.entries) {
       if (!e.ok) console.log(`    FAIL ${e.id}: ${e.failures.join(', ')}`);
     }
+  }
+  if (report.visibleErrors) console.log(`  visible errors: pre-existing ${report.visibleErrors.preExisting} · introduced ${report.visibleErrors.introduced}`);
+  if (Array.isArray(report.notCovered) && report.notCovered.length) {
+    for (const b of report.notCovered) console.log(`  NOT COVERED (blocked) ${b.id}${b.reason ? ` — ${b.reason}` : ''}`);
   }
 }
 

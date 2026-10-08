@@ -75,6 +75,22 @@ const READERS = `
     templateLiteral: /\\$\\{[^}]*\\}/.test(text),
     dollarVariable: /\\$[A-Za-z_]/.test(text),
   });
+  // Inline error text the game writes into the passage itself (for example a
+  // pronoun or person widget failing without a target). It is plain text, so
+  // neither the .error node counter nor the rawMacro leak sees it. Recorded
+  // verbatim (bounded) so a control pass can separate a pre-existing rendering
+  // limitation from a pack-introduced regression.
+  const visibleErrorsOf = (text) => {
+    const found = [];
+    const re = /\\[ERROR:[^\\]]*\\]/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const s = m[0].slice(0, 140);
+      if (!found.includes(s)) found.push(s);
+      if (found.length >= 20) break;
+    }
+    return found;
+  };
   // Informational only. Non-ASCII ratio and common-language word counts let a
   // human see how much of the screen is still source text; they never gate.
   const diagnosticsOf = (text) => {
@@ -221,6 +237,10 @@ ${READERS}
     out.bodyErrorsAfterInteraction = errors().length;
   }
 
+  // Page-visible error text, recorded for the baseline comparison. Which of
+  // these count as a failure is decided by the caller (only ones that the same
+  // scene did NOT show without the pack are pack-introduced).
+  out.visibleErrors = visibleErrorsOf(text);
   if (SPEC.recordLength) out.finalTextLength = text.length;
   return out;
 })()`;
@@ -287,6 +307,13 @@ export function evaluateScenarioResult(scenario, result) {
   if (Number(result.bodyErrors) > 0) failures.push(`js-errors:${result.bodyErrors}`);
   if (Number(result.bodyErrorsAfterInteraction) > 0) failures.push(`js-errors-after-interaction:${result.bodyErrorsAfterInteraction}`);
   if (Array.isArray(result.requireMissing) && result.requireMissing.length) failures.push(`missing-selectors:${result.requireMissing.join('|')}`);
+  // Visible error text that the same scene did NOT show without the pack: a
+  // real, pack-introduced regression. Pre-existing errors are recorded but
+  // never fail a scene, so an unrelated game/test-environment limitation is
+  // not misreported as a localization defect.
+  if (Array.isArray(result.introducedVisibleErrors) && result.introducedVisibleErrors.length) {
+    failures.push(`visible-error-introduced:${result.introducedVisibleErrors.join('|')}`);
+  }
   const leaks = result.leaks || {};
   for (const key of ['rawMacro', 'placeholder', 'unresolvedLink', 'entityNoise', 'templateLiteral']) {
     if (leaks[key]) failures.push(`leak:${key}`);

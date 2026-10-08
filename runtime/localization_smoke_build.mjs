@@ -30,7 +30,7 @@ import { createZip, readStoredEntry } from '../core/src/lib/zip.mjs';
 import { classifyCoverage } from '../core/src/lib/coverage.mjs';
 import { loadState, recordsFromLocalizationSource } from '../core/src/lib/localization-state.mjs';
 import { buildEntries } from '../core/src/lib/entries.mjs';
-import { loadScenarioSpec, validateScenario, scenariosForLevel, scenarioPassages } from './android/lib/localization-scenarios.mjs';
+import { loadScenarioSpec, validateScenario, scenariosForLevel, scenarioPassages, blockedScenarios } from './android/lib/localization-scenarios.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '..');
@@ -165,6 +165,7 @@ function main() {
     // The full level registry, so the runtime harness can honour --level on
     // an expectations file that was built at a wider level than the run.
     levels: spec.levels,
+    blocked: blockedScenarios(spec),
     counts: coverage.counts,
     unmatched: unmatched.length,
   };
