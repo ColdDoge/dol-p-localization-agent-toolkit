@@ -11,6 +11,8 @@ optionally validate the result on a real Android device.
 It is a **localization engineering** tool. It protects game structure and tracks
 coverage; **you supply the translations**.
 
+**[Project background, motivation & acknowledgements — Full English version](docs/PROJECT-BACKGROUND-AND-ACKNOWLEDGEMENTS.en.md)**
+
 ## Visual translation editor (single offline HTML)
 
 **[Open / download the HTML editor](dolp-kit-translation-editor.html)** · [English user guide](docs/KIT-EDITOR-GUIDE.en.md) · [中文指南](docs/翻译编辑器使用指南.md)
