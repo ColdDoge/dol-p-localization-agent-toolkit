@@ -43,6 +43,28 @@ prompt, and send it to your coding agent.
 > 这些提示词可以从空文件夹开始：Agent 会自行克隆仓库、读取公开工作流，并避免把
 > 用户汉化数据提交进 Git 历史。
 
+## Web translation editor / 网页翻译编辑器
+
+Besides the offline CLI, the repository ships a self-contained, local browser
+editor at [`dolp-kit-translation-editor.html`](dolp-kit-translation-editor.html).
+Open it in Chrome / Edge: it reads a `localization-kit.zip`, lets you fill
+`translation`, checks structure and placeholders, tracks review status, and
+exports a new ZIP / JSONL. It adds draft autosave and recovery, undo / redo,
+search and advanced filters, safety / terminology / duplicate / conflict panels,
+safe merge, and new-version migration. Editor state lives in a separate project
+file and the browser draft, never in the game pack.
+
+除离线 CLI 外，仓库根目录还提供一个自包含的本地网页翻译编辑器
+[`dolp-kit-translation-editor.html`](dolp-kit-translation-editor.html)：用
+Chrome / Edge 打开即可读取 `localization-kit.zip`、填写译文、检查结构与占位符、
+标记校对状态，并导出新的 ZIP / JSONL。新增功能包括草稿自动保存与恢复、
+撤销 / 重做、搜索与高级筛选、安全 / 术语 / 重复原文 / 冲突面板、安全合并与
+新版本迁移。编辑状态保存在独立的工程文件和浏览器草稿中，不会写入游戏翻译包。
+
+Guides / 指南：[网页翻译工具使用指南](docs/网页翻译工具使用指南.md) ·
+[翻译数据安全与恢复说明](docs/翻译数据安全与恢复说明.md) ·
+[多人合并与版本迁移指南](docs/多人合并与版本迁移指南.md)
+
 ## Full documentation / 完整说明
 
 - [English README](README.en.md)

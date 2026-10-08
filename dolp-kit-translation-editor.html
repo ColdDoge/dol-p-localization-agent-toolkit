@@ -131,6 +131,40 @@
     @media(min-width:1350px) {.wrap{width:min(1200px, calc(100% - 72px));}}
     @media(max-width:650px){.side-tab{padding:10px 6px;top:55%;} .drawer{padding:20px 16px 36px;} .wrap{width:calc(100% - 20px);} .top-inner{padding:21px 0;} .head-actions{width:100%;} .head-actions .btn{flex:1;} .summary{padding:17px;} .item-body{padding:14px;} .source{padding:13px;} .toolbar{position:static;} .search{width:100%;flex-basis:100%;} .empty{padding:40px 20px;}}
     @media(prefers-reduced-motion: reduce){*,*:before,*:after{transition:none!important;}}
+    .toolbar.secondary{margin-top:-6px;}
+    .toolbar .sep{width:1px;height:26px;background:var(--line);}
+    .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:9px;margin-top:14px;}
+    .stat{background:var(--field);border:1px solid var(--line);border-radius:11px;padding:9px 11px;}
+    .stat .k{font-size:12px;color:var(--soft);}
+    .stat .v{font-size:19px;font-weight:760;font-variant-numeric:tabular-nums;}
+    .stat.bad .v{color:var(--warn);}
+    .item.focus{outline:3px solid var(--accent);outline-offset:2px;}
+    .item-status{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;}
+    .item-status .select{min-height:34px;padding:6px 9px;}
+    .item-status .note{flex:1;min-width:150px;border:1px solid var(--line);border-radius:9px;background:var(--field);color:var(--ink);padding:8px 10px;}
+    .item-status .fieldlabel{margin:0;}
+    .state.issue{background:#fff1ef;color:#95362b;}
+    .stack{display:grid;gap:10px;margin:14px 0;}
+    .issue,.dup-group,.mig-row{border:1px solid var(--line);border-radius:11px;padding:11px 12px;background:var(--field);}
+    .issue.sev-error{border-color:#efc2ba;} .issue.sev-warn{border-color:#ead2a5;}
+    .issue .issue-head{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;}
+    .issue .sev{font-size:12px;font-weight:750;}
+    .issue.sev-error .sev{color:#95362b;} .issue.sev-warn .sev{color:#80511c;} .issue.sev-info .sev{color:var(--soft);}
+    .issue .snip,.dup-group .snip{font-size:12px;color:var(--soft);margin-top:6px;overflow-wrap:anywhere;line-height:1.55;}
+    .issue .snip b,.dup-group .snip b{color:var(--ink);}
+    .issue .actions,.dup-group .actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;}
+    .conflict-pick{display:flex;gap:14px;flex-wrap:wrap;margin-top:7px;font-size:13px;}
+    .conflict-pick label{display:flex;gap:5px;align-items:center;}
+    .modal-shade{position:fixed;inset:0;background:#061c27b0;z-index:40;display:flex;align-items:center;justify-content:center;padding:18px;}
+    .modal{background:var(--panel);border-radius:16px;box-shadow:0 20px 60px #04141b66;max-width:min(720px,96vw);max-height:88vh;overflow:auto;padding:22px;width:100%;}
+    .modal h2{margin:0 0 10px;font-size:20px;}
+    .modal p{color:var(--soft);font-size:13px;line-height:1.65;}
+    .modal .modal-actions{display:flex;gap:9px;flex-wrap:wrap;justify-content:flex-end;margin-top:16px;}
+    .panel-head{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;}
+    .mig-cat{display:inline-block;font-size:12px;padding:2px 8px;border-radius:7px;background:var(--accentwash);color:#315c72;margin-left:6px;}
+    body.dark .state.issue{background:#5a2f2b;color:#ffc5bd;}
+    body.dark .modal-shade{background:#04141bd0;}
+    body.dark .stat{background:#19262f;}
   </style>
 </head>
 <body>
@@ -171,6 +205,8 @@
         <div class="sum-head"><div class="sum-title" id="fileName"></div><div class="counts" id="countText"></div></div>
         <div class="progress"><div id="progressBar"></div></div>
         <div class="subline"><span id="kitInfo"></span><span id="saveState">可编辑</span></div>
+        <div class="statgrid" id="statsGrid"></div>
+        <div class="subline" style="margin-top:9px"><span id="draftState"></span><span id="histState"></span></div>
       </div>
       <div class="summary-actions" style="margin-top:15px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
         <button class="btn primary" type="button" id="copyAllBtn" data-i18n="copyAll">↓ 将整包原文复制到所有译文框</button>
@@ -180,19 +216,56 @@
         <button class="btn" type="button" id="handoffBtn" disabled data-i18n="handoffBtn">导入已有译文 ZIP / JSONL</button>
         <select class="select" id="mergeMode" aria-label="译文合并方式" data-i18n-aria="mergeModeLabel">
           <option value="fill" data-i18n="mergeFill">只填空白（推荐）</option>
+          <option value="keep" data-i18n="mergeKeep">保留当前译文，跳过冲突</option>
+          <option value="preview" data-i18n="mergePreview">预览冲突后逐条选择</option>
           <option value="overwrite" data-i18n="mergeOverwrite">覆盖不同译文（需确认）</option>
         </select>
         <span class="handoff-hint" data-i18n="handoffHint">只接受条目及原文身份完全一致的文件；按 unitId 合并，不会替换当前 Kit。</span>
       </div>
+      <div class="handoff-actions" id="projectActions" aria-label="编辑工程" data-i18n-aria="projectAria">
+        <button class="btn" type="button" id="exportProjectBtn" data-i18n="exportProject">导出编辑工程 JSON</button>
+        <button class="btn" type="button" id="importProjectBtn" data-i18n="importProject">导入编辑工程 JSON</button>
+        <button class="btn" type="button" id="migrateBtn" data-i18n="migrateBtn">迁移新版本译文</button>
+        <button class="btn" type="button" id="clearDraftBtn" data-i18n="clearDraft">清除本机草稿</button>
+        <span class="handoff-hint" data-i18n="projectHint">编辑工程独立保存状态标记、备注与忽略项，不会写入游戏翻译包。</span>
+      </div>
       <div class="toolbar" aria-label="文本筛选" data-i18n-aria="filterLabel">
         <input class="search" type="search" id="search" placeholder="搜索原文、译文、场景…" aria-label="搜索原文、译文、场景" data-i18n-placeholder="searchPlaceholder" data-i18n-aria="searchPlaceholder">
         <select class="select" id="filter" aria-label="按状态筛选" data-i18n-aria="statusFilter">
-          <option value="all" data-i18n="filter_all">全部条目</option><option value="todo" data-i18n="filter_todo">仅未翻译</option><option value="done" data-i18n="filter_done">仅已翻译</option><option value="warn" data-i18n="filter_warn">占位符提醒</option>
+          <option value="all" data-i18n="filter_all">全部条目</option>
+          <option value="todo" data-i18n="filter_todo">未翻译</option>
+          <option value="done" data-i18n="filter_done">已翻译</option>
+          <option value="proofread" data-i18n="filter_proofread">待校对</option>
+          <option value="reviewed" data-i18n="filter_reviewed">已校对</option>
+          <option value="flagged" data-i18n="filter_flagged">存疑</option>
+          <option value="issues" data-i18n="filter_issues">存在安全问题</option>
+          <option value="warn" data-i18n="filter_warn">占位符提醒</option>
+          <option value="term" data-i18n="filter_term">包含指定术语</option>
+          <option value="conflict" data-i18n="filter_conflict">存在翻译冲突</option>
+          <option value="duplicate" data-i18n="filter_duplicate">存在重复原文</option>
         </select>
-        <select class="select" id="sort" aria-label="排序方式" data-i18n-aria="sortLabel"><option value="default" data-i18n="sortDefault">原始顺序</option><option value="todo" data-i18n="sortTodo">未翻译优先</option></select>
+        <input class="search" type="search" id="termFilter" placeholder="术语" aria-label="指定术语" data-i18n-placeholder="termFilterPlaceholder" data-i18n-aria="termFilterLabel" style="flex:0 1 120px;min-width:100px">
+        <select class="select" id="sort" aria-label="排序方式" data-i18n-aria="sortLabel"><option value="default" data-i18n="sortDefault">原始顺序</option><option value="todo" data-i18n="sortTodo">未翻译优先</option><option value="flagged" data-i18n="sortFlagged">存疑优先</option><option value="passage" data-i18n="sortPassage">按场景</option></select>
         <select class="select" id="pageSize" aria-label="每页条数"><option value="20">每页 20 条</option><option value="40" selected>每页 40 条</option><option value="80">每页 80 条</option></select>
         <div class="size-controls"><span data-i18n="fontSize">字号</span><button class="btn tiny flat" type="button" id="sizeDown" aria-label="缩小字号" data-i18n-aria="fontDown">A−</button><button class="btn tiny flat" type="button" id="sizeUp" aria-label="放大字号" data-i18n-aria="fontUp">A+</button></div>
         <button class="btn tiny flat" type="button" id="themeBtn" data-i18n="darkTheme">深色模式</button>
+      </div>
+      <div class="toolbar secondary" aria-label="编辑操作" data-i18n-aria="editOpsLabel">
+        <button class="btn tiny" type="button" id="undoBtn" data-i18n="undo">撤销</button>
+        <button class="btn tiny" type="button" id="redoBtn" data-i18n="redo">重做</button>
+        <span class="sep"></span>
+        <button class="btn tiny" type="button" id="panelSafetyBtn" data-i18n="panelSafety">安全检查</button>
+        <button class="btn tiny" type="button" id="panelTermBtn" data-i18n="panelTerm">术语检查</button>
+        <button class="btn tiny" type="button" id="panelDupBtn" data-i18n="panelDup">重复原文</button>
+        <button class="btn tiny" type="button" id="panelConflictBtn" data-i18n="panelConflict">冲突</button>
+        <span class="sep"></span>
+        <select class="select" id="batchStatus" aria-label="批量标记状态" data-i18n-aria="batchStatusLabel">
+          <option value="unmarked" data-i18n="statusUnmarked">未标记</option>
+          <option value="proofread" data-i18n="statusProofread">待校对</option>
+          <option value="reviewed" data-i18n="statusReviewed">已校对</option>
+          <option value="flagged" data-i18n="statusFlagged">存疑</option>
+        </select>
+        <button class="btn tiny" type="button" id="batchMarkBtn" data-i18n="markBatch">标记当前结果</button>
       </div>
       <div class="list" id="list"></div>
       <nav class="pager" aria-label="分页"><button class="btn" id="prev" type="button" data-i18n="prevPage">上一页</button><span id="pageText"></span><button class="btn" id="next" type="button" data-i18n="nextPage">下一页</button></nav>
@@ -201,6 +274,8 @@
     <input type="file" id="file" accept=".zip,application/zip" class="hidden">
     <input type="file" id="keywordsFile" accept=".json,application/json" class="hidden">
     <input type="file" id="handoffFile" accept=".zip,.jsonl,application/zip,application/x-ndjson" class="hidden">
+    <input type="file" id="projectFile" accept=".json,application/json" class="hidden">
+    <input type="file" id="migrateFile" accept=".zip,.jsonl,.json,application/zip,application/x-ndjson,application/json" class="hidden">
   </main>
   <button class="side-tab" id="keywordsSideBtn" type="button" data-i18n="sidebarKeywords" aria-label="打开关键词词典" data-i18n-aria="openKeywords">关键词</button>
   <div class="drawer-shade hidden" id="drawerShade"></div>
@@ -221,6 +296,18 @@
     <div class="term-count" id="termCount"></div>
     <div class="term-list" id="termList"></div>
   </aside>
+  <div class="drawer-shade hidden" id="panelShade"></div>
+  <aside class="drawer hidden" id="panelDrawer" role="dialog" aria-modal="true" aria-labelledby="panelTitle" tabindex="-1">
+    <div class="drawer-titlebar"><h2 id="panelTitle"></h2><button class="btn tiny" type="button" id="panelClose" data-i18n="close">关闭</button></div>
+    <div class="panel-body" id="panelBody"></div>
+  </aside>
+  <div class="modal-shade hidden" id="modalShade">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <h2 id="modalTitle"></h2>
+      <div id="modalBody"></div>
+      <div class="modal-actions" id="modalActions"></div>
+    </div>
+  </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <!-- JSZip 3.10.1 (MIT or GPLv3, used under MIT): https://stuk.github.io/jszip/ ; license notice kept in embedded distribution. -->
@@ -245,8 +332,361 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   const $ = id => document.getElementById(id);
   const enc = new TextEncoder();
   const dec = new TextDecoder('utf-8', {fatal:true});
+  /* ==== DOLP-EDITOR-ENGINE:BEGIN ==== */
+  /*
+   * Pure, DOM-free logic for the translation editor. core/test/translation-
+   * editor.test.mjs extracts this region from the HTML and runs it directly,
+   * so everything here must stay free of window / document / localStorage /
+   * IndexedDB / network references and must not throw on odd input.
+   *
+   * Rule of thumb: the engine returns machine codes and counts; the UI layer
+   * turns them into localized text.
+   */
+  const EditorEngine = (function () {
+    const PLACEHOLDER_RE = /\u27e6\d+\u27e7/g;
+    // Only explicit, high-signal structures. Bare < > { } % are NOT treated as
+    // variables, so ordinary punctuation never produces a false structure hit.
+    const STRUCTURE_RE = /(<<[\s\S]*?>>|\[\[[\s\S]*?\]\]|<\/?[A-Za-z][^<>]*>|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)/g;
+    const STATUSES = ['unmarked', 'proofread', 'reviewed', 'flagged'];
+    const OBJECTIVE_SEVERITY = { error: 0, warn: 1, info: 2 };
+
+    function asString(v) { return v == null ? '' : String(v); }
+    function trim(v) { return asString(v).trim(); }
+
+    function placeholders(text) { return asString(text).match(PLACEHOLDER_RE) || []; }
+    function structureTokens(text) { return asString(text).match(STRUCTURE_RE) || []; }
+    function isCompleted(seg) { return trim(seg && seg.translation).length > 0; }
+    function statusOf(seg) { const s = seg && seg.status; return STATUSES.includes(s) ? s : 'unmarked'; }
+
+    function multisetEqual(a, b) {
+      if (a.length !== b.length) return false;
+      const m = new Map();
+      for (const x of a) m.set(x, (m.get(x) || 0) + 1);
+      for (const x of b) { const c = m.get(x) || 0; if (!c) return false; m.set(x, c - 1); }
+      return true;
+    }
+
+    /** Placeholder integrity for one entry: count / multiset / order. */
+    function placeholderIssues(source, translation) {
+      const a = placeholders(source);
+      const b = placeholders(translation);
+      const out = [];
+      if (!b.length && !a.length) return out;
+      if (a.length !== b.length) out.push({ code: 'PLACEHOLDER_COUNT_CHANGED', severity: 'error', detail: `${a.length} -> ${b.length}` });
+      else if (a.join('\u0001') !== b.join('\u0001')) {
+        out.push({ code: multisetEqual(a, b) ? 'PLACEHOLDER_ORDER_CHANGED' : 'PLACEHOLDER_MISMATCH', severity: 'error', detail: `${a.join(' ')} -> ${b.join(' ')}` });
+      }
+      return out;
+    }
+
+    function hasBlocking(issues) { return (issues || []).some((i) => i.severity === 'error' || i.code === 'TERM_MISSING' || i.code === 'UNEXPECTED_STRUCTURE'); }
+
+    /** Full local safety scan for one entry. Never mutates anything. */
+    function checkSegmentSafety(seg) {
+      const issues = [];
+      if (!seg) return issues;
+      const src = asString(seg.protectedSource);
+      const tr = asString(seg.translation);
+      if (!trim(tr)) return issues; // untranslated: nothing structural to judge
+      issues.push(...placeholderIssues(src, tr));
+      const typed = structureTokens(tr).filter((t) => !src.includes(t));
+      if (typed.length) issues.push({ code: 'UNEXPECTED_STRUCTURE', severity: 'warn', detail: typed.slice(0, 4).join(' ') });
+      if (trim(src) && trim(tr) === trim(src)) issues.push({ code: 'SAME_AS_SOURCE', severity: 'info', detail: '' });
+      if (tr !== tr.trim()) issues.push({ code: 'EDGE_WHITESPACE', severity: 'info', detail: '' });
+      issues.sort((x, y) => OBJECTIVE_SEVERITY[x.severity] - OBJECTIVE_SEVERITY[y.severity]);
+      return issues;
+    }
+
+    function escapeRegExp(s) { return asString(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+    function isLatinTerm(term) { return /^[A-Za-z][A-Za-z0-9_]*(?:[ -][A-Za-z0-9_]+)*$/.test(asString(term)); }
+    /** Whole-word (case-sensitive) match for Latin terms, plain substring otherwise. */
+    function sourceContains(src, term) {
+      const t = asString(term);
+      if (!t) return false;
+      if (isLatinTerm(t)) return new RegExp(`(?<![A-Za-z0-9_])${escapeRegExp(t)}(?![A-Za-z0-9_])`).test(asString(src));
+      return asString(src).includes(t);
+    }
+
+    /**
+     * Terminology consistency: a glossary term present in the source should
+     * appear (as its mapped target) in the translation. Only a warning; the
+     * user may ignore a single (unitId, term) pair via `ignored`.
+     */
+    function checkSegmentTerminology(seg, terms, ignored) {
+      const out = [];
+      if (!seg || !terms || !terms.length) return out;
+      const src = asString(seg.protectedSource);
+      const tr = asString(seg.translation);
+      if (!trim(tr)) return out;
+      const ig = ignored instanceof Set ? ignored : new Set(Array.isArray(ignored) ? ignored : []);
+      const ordered = [...terms].filter((t) => t && trim(t.source) && trim(t.target)).sort((a, b) => asString(b.source).length - asString(a.source).length);
+      const claimed = [];
+      for (const term of ordered) {
+        const s = asString(term.source);
+        if (ig.has(`${seg.unitId}\u0001${s}`)) continue;
+        if (!sourceContains(src, s)) continue;
+        if (claimed.some((c) => c.includes(s))) continue; // a longer matched term already covers this span
+        claimed.push(s);
+        if (!tr.includes(asString(term.target))) out.push({ code: 'TERM_MISSING', severity: 'warn', term: s, expected: asString(term.target), detail: '' });
+      }
+      return out;
+    }
+
+    /** Exact duplicate-source groups (phase 1: identical protectedSource). */
+    function duplicateGroups(segments) {
+      const map = new Map();
+      for (const s of segments || []) {
+        const key = asString(s.protectedSource);
+        if (!trim(key)) continue;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(s);
+      }
+      const groups = [];
+      for (const [key, list] of map) {
+        if (list.length < 2) continue;
+        const translations = [...new Set(list.map((s) => trim(s.translation)).filter(Boolean))];
+        groups.push({
+          key,
+          count: list.length,
+          entries: list,
+          unitIds: list.map((s) => s.unitId),
+          translations,
+          divergent: translations.length > 1,
+          emptyCount: list.filter((s) => !isCompleted(s)).length,
+        });
+      }
+      groups.sort((a, b) => b.count - a.count);
+      return groups;
+    }
+
+    function indexOfIssueUnits(issuesByUnit) {
+      const set = new Set();
+      if (!issuesByUnit) return set;
+      const entries = issuesByUnit instanceof Map ? issuesByUnit : new Map(Object.entries(issuesByUnit));
+      for (const [id, list] of entries) if ((list || []).some((i) => i.severity !== 'info')) set.add(id);
+      return set;
+    }
+
+    /**
+     * The single view pipeline: raw data -> search -> filter -> sort.
+     * Never reorders or rewrites the underlying rows; returns {s,i} pairs.
+     */
+    function computeView(segments, opts) {
+      const o = opts || {};
+      const query = asString(o.query).trim().toLocaleLowerCase();
+      const filter = o.filter || 'all';
+      const sort = o.sort || 'default';
+      const term = asString(o.term);
+      const issueUnits = indexOfIssueUnits(o.issuesByUnit);
+      const dupUnits = o.duplicateUnits instanceof Set ? o.duplicateUnits : new Set(o.duplicateUnits || []);
+      const conflictUnits = o.conflictUnits instanceof Set ? o.conflictUnits : new Set(o.conflictUnits || []);
+      const matches = ({ s }) => {
+        if (query) {
+          const hay = [s.protectedSource, s.translation, s.passage, s.unitId, s.note];
+          if (!hay.some((v) => asString(v).toLocaleLowerCase().includes(query))) return false;
+        }
+        switch (filter) {
+          case 'todo': return !isCompleted(s);
+          case 'done': return isCompleted(s);
+          case 'proofread': return statusOf(s) === 'proofread';
+          case 'reviewed': return statusOf(s) === 'reviewed';
+          case 'flagged': return statusOf(s) === 'flagged';
+          case 'issues': return issueUnits.has(s.unitId);
+          case 'term': return term ? sourceContains(s.protectedSource, term) : true;
+          case 'conflict': return conflictUnits.has(s.unitId);
+          case 'duplicate': return dupUnits.has(s.unitId);
+          default: return true;
+        }
+      };
+      const visible = (segments || []).map((s, i) => ({ s, i })).filter(matches);
+      if (sort === 'todo') visible.sort((a, b) => Number(isCompleted(a.s)) - Number(isCompleted(b.s)) || a.i - b.i);
+      else if (sort === 'flagged') visible.sort((a, b) => Number(statusOf(b.s) === 'flagged') - Number(statusOf(a.s) === 'flagged') || a.i - b.i);
+      else if (sort === 'passage') visible.sort((a, b) => asString(a.s.passage).localeCompare(asString(b.s.passage)) || a.i - b.i);
+      return visible;
+    }
+
+    /**
+     * Project-wide statistics. "Translated" means the translation is non-empty
+     * after trimming; a translation that intentionally equals the source still
+     * counts as translated.
+     */
+    function statusStats(segments, issuesByUnit) {
+      const list = segments || [];
+      const issueUnits = indexOfIssueUnits(issuesByUnit);
+      let translated = 0, proofread = 0, reviewed = 0, flagged = 0;
+      for (const s of list) {
+        if (isCompleted(s)) translated += 1;
+        const st = statusOf(s);
+        if (st === 'proofread') proofread += 1;
+        else if (st === 'reviewed') reviewed += 1;
+        else if (st === 'flagged') flagged += 1;
+      }
+      const total = list.length;
+      return {
+        total,
+        translated,
+        untranslated: total - translated,
+        percent: total ? Math.round((1000 * translated) / total) / 10 : 0,
+        unmarked: total - proofread - reviewed - flagged,
+        proofread,
+        reviewed,
+        flagged,
+        issues: issueUnits.size,
+      };
+    }
+
+    /**
+     * Plan a handoff merge. `incoming` maps unitId -> translation string.
+     * mode: 'fill' | 'keep' | 'preview' | 'overwrite'.
+     * Returns sparse changes plus a conflict list; no mutation.
+     */
+    function planHandoff(current, incoming, mode) {
+      const mode2 = mode || 'fill';
+      const get = (id) => (incoming instanceof Map ? incoming.get(id) : (incoming || {})[id]);
+      const changes = [];
+      const conflicts = [];
+      const stats = { addable: 0, identical: 0, conflict: 0, missing: 0, bad: 0 };
+      for (const cur of current || []) {
+        if (!(incoming instanceof Map ? incoming.has(cur.unitId) : Object.prototype.hasOwnProperty.call(incoming || {}, cur.unitId))) { stats.missing += 1; continue; }
+        const inc = get(cur.unitId);
+        if (typeof inc !== 'string') { stats.bad += 1; continue; }
+        const incT = trim(inc);
+        const curT = asString(cur.translation);
+        if (!incT || incT === trim(curT)) { stats.identical += 1; continue; }
+        if (trim(curT)) {
+          stats.conflict += 1;
+          if (mode2 === 'overwrite') changes.push({ unitId: cur.unitId, field: 'translation', before: curT, after: inc });
+          else conflicts.push({ unitId: cur.unitId, passage: cur.passage, source: cur.protectedSource, current: curT, incoming: inc });
+        } else {
+          stats.addable += 1;
+          changes.push({ unitId: cur.unitId, field: 'translation', before: curT, after: inc });
+        }
+      }
+      return { changes, conflicts, stats };
+    }
+
+    /**
+     * Version migration: match an OLD translation set (any of translated old
+     * kit / old editor project / hand JSONL) onto the CURRENT (new) segments,
+     * keyed by stable unitId and protectedSource only.
+     * Returns a classified plan; nothing is applied here.
+     */
+    function planMigration(oldEntries, newSegments) {
+      const olds = (oldEntries || []).filter((e) => e && e.unitId);
+      const byId = new Map();
+      const bySource = new Map();
+      for (const e of olds) {
+        byId.set(e.unitId, e);
+        const key = asString(e.protectedSource);
+        if (!bySource.has(key)) bySource.set(key, []);
+        bySource.get(key).push(e);
+      }
+      const news = newSegments || [];
+      const newSourceCount = new Map();
+      for (const s of news) { const k = asString(s.protectedSource); newSourceCount.set(k, (newSourceCount.get(k) || 0) + 1); }
+
+      const rows = [];
+      const safe = [], suggestions = [], ambiguous = [], modified = [], added = [];
+      const matchedOldIds = new Set();
+      for (const s of news) {
+        const src = asString(s.protectedSource);
+        const old = byId.get(s.unitId);
+        if (old) {
+          matchedOldIds.add(old.unitId);
+          if (asString(old.protectedSource) === src) {
+            const oldT = trim(old.translation);
+            if (oldT && !isCompleted(s)) { safe.push({ unitId: s.unitId, translation: oldT }); rows.push({ unitId: s.unitId, category: 'safe' }); }
+            else rows.push({ unitId: s.unitId, category: 'unchanged' });
+          } else {
+            modified.push({ unitId: s.unitId, oldTranslation: asString(old.translation) });
+            rows.push({ unitId: s.unitId, category: 'modified' });
+          }
+          continue;
+        }
+        const cands = (bySource.get(src) || []).filter((e) => e.unitId !== s.unitId);
+        if (cands.length === 1 && newSourceCount.get(src) === 1) {
+          const cand = cands[0];
+          matchedOldIds.add(cand.unitId);
+          suggestions.push({ unitId: s.unitId, fromUnitId: cand.unitId, translation: trim(cand.translation) });
+          rows.push({ unitId: s.unitId, category: 'suggestion' });
+        } else if (cands.length >= 1) {
+          for (const c of cands) matchedOldIds.add(c.unitId);
+          ambiguous.push({ unitId: s.unitId, candidates: cands.map((c) => c.unitId) });
+          rows.push({ unitId: s.unitId, category: 'ambiguous' });
+        } else {
+          added.push({ unitId: s.unitId });
+          rows.push({ unitId: s.unitId, category: 'added' });
+        }
+      }
+      const deleted = olds.filter((e) => !matchedOldIds.has(e.unitId)).map((e) => ({ unitId: e.unitId, translation: asString(e.translation) }));
+      const counts = {
+        unchanged: rows.filter((r) => r.category === 'unchanged').length,
+        added: added.length,
+        modified: modified.length,
+        deleted: deleted.length,
+        safe: safe.length,
+        suggestion: suggestions.length,
+        ambiguous: ambiguous.length,
+      };
+      return { rows, counts, safe, suggestions, ambiguous, modified, added, deleted };
+    }
+
+    /**
+     * Fill blank entries from identical-source groups. Never overwrites an
+     * existing translation; returns sparse changes. `groups` from
+     * duplicateGroups(segments).
+     */
+    function planDuplicateFill(groups) {
+      const changes = [];
+      let divergentGroups = 0;
+      for (const g of groups || []) {
+        if (g.emptyCount === 0 || !g.translations.length) continue;
+        if (g.divergent) divergentGroups += 1;
+        const fill = g.translations[0];
+        for (const s of g.entries || []) {
+          if (isCompleted(s)) continue;
+          changes.push({ unitId: s.unitId, field: 'translation', before: asString(s.translation), after: fill });
+        }
+      }
+      return { changes, divergentGroups };
+    }
+
+    function isProject(doc) {
+      return !!doc && typeof doc === 'object' && doc.format === PROJECT_FORMAT && Number(doc.version) === PROJECT_VERSION;
+    }
+    const PROJECT_FORMAT = 'dolp-kit-editor-project';
+    const PROJECT_VERSION = 1;
+
+    function projectValidate(doc) {
+      if (!isProject(doc)) return { ok: false, reason: 'format' };
+      const records = doc.records && typeof doc.records === 'object' ? doc.records : {};
+      const clean = {};
+      for (const [unitId, rec] of Object.entries(records)) {
+        if (!rec || typeof rec !== 'object') continue;
+        const status = STATUSES.includes(rec.status) ? rec.status : 'unmarked';
+        const note = typeof rec.note === 'string' ? rec.note.slice(0, 500) : '';
+        clean[unitId] = { status, note };
+      }
+      return { ok: true, records: clean, ignoredTerms: Array.isArray(doc.ignoredTerms) ? doc.ignoredTerms.filter((x) => typeof x === 'string') : [], translations: doc.translations && typeof doc.translations === 'object' ? doc.translations : {} };
+    }
+
+    return {
+      PLACEHOLDER_RE, STATUSES,
+      placeholders, structureTokens, isCompleted, statusOf,
+      placeholderIssues, hasBlocking, checkSegmentSafety,
+      isLatinTerm, sourceContains, checkSegmentTerminology,
+      duplicateGroups, planDuplicateFill, computeView, statusStats,
+      planHandoff, planMigration,
+      isProject, projectValidate, PROJECT_FORMAT, PROJECT_VERSION,
+    };
+  })();
+  /* ==== DOLP-EDITOR-ENGINE:END ==== */
   const CSV_COLUMNS = ['unitId','passage','kind','family','riskLevel','protectedSource','rawSourceHash','protectedHash','sourceFingerprint','structuralFingerprint','placeholders','contextBefore','contextAfter','translation'];
-  const model = {zip:null, manifest:null, segments:[], filename:'', draftKey:'', modified:false, seq:0, lastExportSeq:0, saving:false, importing:false, page:0, visible:[], filter:'all', sort:'default', query:'', size:17};
+  const model = {zip:null, manifest:null, segments:[], byId:new Map(), filename:'', draftKey:'', modified:false, seq:0, lastExportSeq:0, saving:false, importing:false, page:0, visible:[], filter:'all', sort:'default', query:'', termFilter:'', size:17,
+    meta:new Map(), ignoredTerms:new Set(), hist:[], histIndex:-1, fieldStart:null,
+    safety:new Map(), termFind:new Map(), dupGroups:[], dupUnits:new Set(), conflictUnits:new Set(), analysisStale:true, draftState:'idle', draftAt:0, recoveries:[],
+    previewConflicts:[], previewChoices:new Map(), previewFill:[], migratePlan:null, panelKind:null};
+  const HIST_LIMIT = 120;
   const UI = {
     zh: {
       title:'译文编辑器', subtitle:'阅读原文、填写译文、导出完整 Kit。只显示需要翻译的文本。',
@@ -280,6 +720,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       confirmCopyOne:'本条已经有译文，复制原文会覆盖它。确定继续吗？',
       confirmCopyAll:'确定把当前 Kit 的 {total} 条原文全部复制进对应译文框吗？\n\n这会覆盖 {overwrites} 条已有译文。导出前可依靠浏览器草稿，但建议先备份当前 ZIP。',
       phExportConfirm:'有 {n} 条译文的占位符与原文不一致。\n\n这可能导致 Toolkit 导入拒绝，也可能是允许省略的软代词宏。仍然导出吗？',
+      exportErrorConfirm:'有 {n} 条译文存在结构错误（占位符数量 / 顺序 / 结构不一致），Toolkit 很可能拒绝导入。\n\n这不会修改任何译文。仍然导出吗？',
       generating:'正在生成文件…',exportSuccess:'{kind} 已导出，请保存到可靠位置',zipKind:'完整 Kit ZIP',exportError:'导出失败：{error}',
       badCsvQuotes:'CSV 引号未闭合',badCsvColumns:'segments.csv 缺少必需字段',jsonlLineBad:'segments.jsonl 第 {line} 行 JSON 无法解析：{error}',
       jsonlLineMissing:'segments.jsonl 第 {line} 行缺少单元 ID / protectedSource / placeholders',
@@ -318,6 +759,31 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       handoffOverwriteConfirm:'交接文件中 {n} 条译文与你正在编辑的译文不同。覆盖会丢失当前译文！\n\n确定以导入文件为准覆盖吗？',
       handoffResult:'交接完成：新增 {added} 条，覆盖 {overwritten} 条，跳过冲突 {conflicts} 条，未修改 {unchanged} 条。请导出 ZIP 保存。',
       handoffNoChanges:'文件验证通过，没有可合并的新译文（跳过冲突 {conflicts} 条）。',
+      confirm:'确定',cancel:'取消',
+      undo:'撤销',redo:'重做',undoNothing:'没有可撤销的操作',undone:'已撤销：{label}',redone:'已重做：{label}',
+      editOpsLabel:'编辑操作',panelSafety:'安全检查',panelTerm:'术语检查',panelDup:'重复原文',panelConflict:'冲突',panelProject:'工程与进度',
+      batchStatusLabel:'批量标记状态',markBatch:'标记当前结果',markBatchConfirm:'把当前筛选出的 {n} 条标记为“{status}”？',markedBatch:'已标记 {n} 条',
+      filter_proofread:'待校对',filter_reviewed:'已校对',filter_flagged:'存疑',filter_issues:'存在安全问题',filter_term:'包含指定术语',filter_conflict:'存在翻译冲突',filter_duplicate:'存在重复原文',
+      termFilterPlaceholder:'术语',termFilterLabel:'指定术语',sortFlagged:'存疑优先',sortPassage:'按场景',
+      statTotal:'总条目',statTranslated:'已翻译',statUntranslated:'未翻译',statPercent:'完成度',statProofread:'待校对',statReviewed:'已校对',statFlagged:'存疑',statIssues:'安全问题',
+      histState:'历史：{n} 步',histEmpty:'暂无撤销记录',
+      statusLabel:'状态',statusUnmarked:'未标记',statusProofread:'待校对',statusReviewed:'已校对',statusFlagged:'存疑',
+      noteLabel:'备注',notePlaceholder:'可选备注',statusSavedNote:'状态与备注保存在工程/草稿中，不会写入 Kit。',
+      draftSaved:'草稿已保存',draftSaving:'正在保存草稿…',draftError:'草稿保存失败',draftIdle:'草稿未修改',draftUnavailableShort:'草稿不可用',
+      draftLastSaved:'最后保存：{time}',draftRecoveryPoints:'本机保留 {n} 个恢复点',
+      restoreTitle:'发现本机草稿',restoreBody:'这个 Kit 在本浏览器里有草稿（{date}，{n} 条与文件不同）。请选择处理方式：',
+      restoreDraft:'恢复草稿',useImported:'使用刚导入的文件',exportDraftBackup:'先导出草稿备份',
+      clearDraft:'清除本机草稿',clearDraftConfirm1:'第一次确认：清除当前项目的本机草稿？',clearDraftConfirm2:'第二次确认：草稿删除后无法恢复，确定清除？',draftCleared:'草稿已清除',noDraft:'当前项目没有本机草稿',draftBackupSaved:'草稿备份已导出',
+      projectAria:'编辑工程',exportProject:'导出编辑工程 JSON',importProject:'导入编辑工程 JSON',projectHint:'编辑工程独立保存状态标记、备注与忽略项，不会写入游戏翻译包。',
+      projectSaved:'编辑工程已导出，请另行备份',projectBad:'不是本编辑器支持的编辑工程文件',projectLoaded:'编辑工程已导入：状态 {n} 条',projectMismatch:'工程对应的 Kit 与当前 Kit 不同；仅合并条目 ID 相同且原文一致的状态标记',projectTranslationsConfirm:'工程内含译文：是否用其中译文填充当前空白条目？',projectFilled:'已从工程填充 {n} 条空白译文',
+      safetyIntro:'安全检查只比对结构与占位符，绝不会修改任何译文。',safetyCheckAll:'检查全部条目',safetyCheckCurrent:'检查当前条目',safetyOk:'未发现结构问题。',safetyFound:'发现 {n} 条问题',safetyReset:'已清除检查结果',safetyNone:'尚未运行检查。',
+      sevError:'错误',sevWarn:'警告',sevInfo:'提示',locate:'定位',
+      issue_PLACEHOLDER_COUNT_CHANGED:'占位符数量与原文不一致',issue_PLACEHOLDER_MISMATCH:'占位符与原文不匹配',issue_PLACEHOLDER_ORDER_CHANGED:'占位符顺序与原文不一致',issue_UNEXPECTED_STRUCTURE:'译文里出现原文没有的结构（宏/变量/标签/链接）',issue_SAME_AS_SOURCE:'译文与原文完全相同',issue_EDGE_WHITESPACE:'译文首尾有多余空白',
+      termIntro:'利用关键词词典检查原文术语是否按词典翻译；只提示，不自动修改。',termCheck:'检查术语一致性',termNone:'未发现术语不一致。',termFound:'发现 {n} 条术语提醒',termExpected:'推荐译法',termIgnore:'忽略此提醒',termIgnored:'已忽略该提醒',termApply:'采用推荐译法',termApplyConfirm:'把条目 {id} 译文中的“{term}”替换为“{expected}”？',termApplied:'已替换 {n} 处',
+      dupIntro:'找出保护后原文完全相同的条目，帮助复用译文；相同原文也可能因语境不同而需要不同译文。',dupNone:'没有完全重复的原文。',dupFound:'共 {n} 组重复原文',dupCount:'{n} 条',dupDivergent:'存在不同译文',dupAllSame:'译文一致',dupFill:'用已有译文填充空白条目',dupFillNone:'没有可自动填充的空白条目。',dupFillConfirm:'将把 {n} 条空白条目填充为同组已有译文（不会覆盖已有译文；其中 {div} 组存在不同译文，请留意）。继续吗？',dupFilled:'已填充 {n} 条空白译文',
+      conflictIntro:'导入已有译文时若与当前译文不同，会在此逐条预览。',conflictNone:'没有翻译冲突。',conflictKeep:'保留当前',conflictTake:'采用导入',conflictApplyAll:'全部采用导入',conflictKeepAll:'全部保留当前',conflictApply:'应用所选',conflictApplied:'已应用 {n} 条',handoffStats:'导入预览：可补充 {addable} 条，内容一致 {identical} 条，冲突 {conflict} 条，无法匹配 {missing} 条，结构异常 {bad} 条。',handoffKeepReport:'已保留当前译文，跳过 {n} 条冲突。',
+      mergePreview:'预览冲突后逐条选择',mergeKeep:'保留当前译文，跳过冲突',
+      migrateBtn:'迁移新版本译文',migrateWrongFile:'请选择旧版本翻译（已翻译的 Kit ZIP、JSONL 或编辑工程 JSON）。',migrateIntro:'先打开新版本 Kit，再选择旧版本翻译，工具按稳定 ID 与保护后原文分析差异。',migrateAnalyzed:'差异分析完成',migrateSafe:'可安全迁移',migrateSuggestion:'原文相同但 ID 不同（建议）',migrateAmbiguous:'存在匹配歧义',migrateModified:'原文已修改',migrateAdded:'新增条目',migrateUnchanged:'未变化',migrateDeleted:'已删除旧条目',migrateApply:'执行迁移（仅填充空白）',migrateApplyConfirm:'将向 {n} 条空白译文迁移旧译文。继续吗？',migrateSuggestionConfirm:'另有 {n} 条“原文相同但 ID 不同”的建议，是否一并采用到空白条目？',migrateNone:'没有可安全迁移的译文。',migrateApplied:'迁移完成：{n} 条',migrateDeletedHint:'被删除的旧条目只保留在报告中，不会映射到其他条目。',
     },
     en: {
       title:'Translation editor', subtitle:'Read the source, enter translations, and export a complete Kit. Only translatable text is shown.',
@@ -351,6 +817,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       confirmCopyOne:'This entry already has a translation. Copying the source will overwrite it. Continue?',
       confirmCopyAll:'Copy the source of all {total} entries to their translation fields?\n\nThis will overwrite {overwrites} existing translations. Back up your current ZIP first if you want to keep them.',
       phExportConfirm:'{n} translations contain placeholders that differ from the source.\n\nThe Toolkit may reject these entries, although some soft pronoun macros may allow omission. Export anyway?',
+      exportErrorConfirm:'{n} translations have structural errors (placeholder count / order / structure mismatch) and will likely be rejected by the Toolkit.\n\nNothing is modified. Export anyway?',
       generating:'Generating file…',exportSuccess:'{kind} exported. Please save it somewhere safe.',zipKind:'Complete Kit ZIP',exportError:'Export failed: {error}',
       badCsvQuotes:'CSV contains unclosed quotes',badCsvColumns:'segments.csv is missing required columns',jsonlLineBad:'Invalid JSON on segments.jsonl line {line}: {error}',
       jsonlLineMissing:'segments.jsonl line {line} is missing ID / protectedSource / placeholders',
@@ -388,7 +855,32 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       handoffCsvConflict:'Imported JSONL and CSV have conflicting translations for {id}',
       handoffOverwriteConfirm:'{n} imported translations differ from your current work. Overwriting will discard your versions!\n\nReplace these translations with the imported versions?',
       handoffResult:'Merged: {added} new, {overwritten} overwritten, {conflicts} conflicts skipped, {unchanged} unchanged. Export ZIP to keep your work.',
-      handoffNoChanges:'File matched, but nothing new was merged ({conflicts} conflicts skipped).'
+      handoffNoChanges:'File matched, but nothing new was merged ({conflicts} conflicts skipped).',
+      confirm:'Confirm',cancel:'Cancel',
+      undo:'Undo',redo:'Redo',undoNothing:'Nothing to undo',undone:'Undone: {label}',redone:'Redone: {label}',
+      editOpsLabel:'Editing actions',panelSafety:'Safety check',panelTerm:'Terminology',panelDup:'Duplicate source',panelConflict:'Conflicts',panelProject:'Project & progress',
+      batchStatusLabel:'Batch status',markBatch:'Mark filtered',markBatchConfirm:'Mark the {n} filtered entries as “{status}”?',markedBatch:'Marked {n} entries',
+      filter_proofread:'Needs proofreading',filter_reviewed:'Proofread',filter_flagged:'Flagged',filter_issues:'Has safety issues',filter_term:'Contains a term',filter_conflict:'Translation conflict',filter_duplicate:'Duplicate source',
+      termFilterPlaceholder:'Term',termFilterLabel:'Term to match',sortFlagged:'Flagged first',sortPassage:'By passage',
+      statTotal:'Total',statTranslated:'Translated',statUntranslated:'Untranslated',statPercent:'Progress',statProofread:'Needs proofreading',statReviewed:'Proofread',statFlagged:'Flagged',statIssues:'Safety issues',
+      histState:'History: {n} step(s)',histEmpty:'No undo history',
+      statusLabel:'Status',statusUnmarked:'Unmarked',statusProofread:'Needs proofreading',statusReviewed:'Proofread',statusFlagged:'Flagged',
+      noteLabel:'Note',notePlaceholder:'Optional note',statusSavedNote:'Status and notes are kept in the project/draft, never written into the Kit.',
+      draftSaved:'Draft saved',draftSaving:'Saving draft…',draftError:'Draft save failed',draftIdle:'Draft unchanged',draftUnavailableShort:'Draft unavailable',
+      draftLastSaved:'Last saved: {time}',draftRecoveryPoints:'{n} recovery point(s) kept locally',
+      restoreTitle:'Browser draft found',restoreBody:'This Kit has a draft in this browser ({date}; {n} entries differ). Choose how to proceed:',
+      restoreDraft:'Restore draft',useImported:'Use imported file',exportDraftBackup:'Export draft backup first',
+      clearDraft:'Clear local draft',clearDraftConfirm1:'First confirmation: clear the local draft for this project?',clearDraftConfirm2:'Second confirmation: deleted drafts cannot be recovered. Clear it?',draftCleared:'Draft cleared',noDraft:'No local draft for this project',draftBackupSaved:'Draft backup exported',
+      projectAria:'Editor project',exportProject:'Export project JSON',importProject:'Import project JSON',projectHint:'The project file keeps status marks, notes, and ignored terms; it is never written into the Kit.',
+      projectSaved:'Project exported. Keep a separate backup.',projectBad:'Not a supported editor project file',projectLoaded:'Project imported: {n} status records',projectMismatch:'The project belongs to a different Kit; only status for identical unitId + source is merged',projectTranslationsConfirm:'The project contains translations: fill the current blank entries from it?',projectFilled:'Filled {n} blank translations from the project',
+      safetyIntro:'The safety check only compares structure and placeholders; it never changes any translation.',safetyCheckAll:'Check all entries',safetyCheckCurrent:'Check current entry',safetyOk:'No structural problems found.',safetyFound:'{n} problem(s) found',safetyReset:'Check results cleared',safetyNone:'No check has been run yet.',
+      sevError:'Error',sevWarn:'Warning',sevInfo:'Hint',locate:'Locate',
+      issue_PLACEHOLDER_COUNT_CHANGED:'Placeholder count differs from the source',issue_PLACEHOLDER_MISMATCH:'Placeholders do not match the source',issue_PLACEHOLDER_ORDER_CHANGED:'Placeholder order differs from the source',issue_UNEXPECTED_STRUCTURE:'Translation contains structure the source does not (macro / variable / tag / link)',issue_SAME_AS_SOURCE:'Translation is identical to the source',issue_EDGE_WHITESPACE:'Translation has extra leading or trailing whitespace',
+      termIntro:'Use the keyword glossary to check whether source terms were translated as specified; advisory only.',termCheck:'Check terminology',termNone:'No terminology inconsistency found.',termFound:'{n} terminology warning(s)',termExpected:'Expected',termIgnore:'Ignore warning',termIgnored:'Warning ignored',termApply:'Apply expected term',termApplyConfirm:'Replace “{term}” with “{expected}” in entry {id}?',termApplied:'Replaced {n} occurrence(s)',
+      dupIntro:'Find entries whose protected source is identical, to reuse translations; identical source may still need different wording by context.',dupNone:'No duplicate source text found.',dupFound:'{n} duplicate group(s)',dupCount:'{n} entries',dupDivergent:'Different translations',dupAllSame:'Translations identical',dupFill:'Fill blanks from an existing translation',dupFillNone:'No blank entry can be filled automatically.',dupFillConfirm:'Fill {n} blank entries from an identical-source translation? Existing translations are never overwritten ({div} group(s) have divergent translations).',dupFilled:'Filled {n} blank translation(s)',
+      conflictIntro:'When an imported translation differs from the current one it is previewed here.',conflictNone:'No translation conflicts.',conflictKeep:'Keep current',conflictTake:'Take imported',conflictApplyAll:'Take imported for all',conflictKeepAll:'Keep current for all',conflictApply:'Apply selected',conflictApplied:'Applied {n} entry/entries',handoffStats:'Import preview: {addable} addable, {identical} identical, {conflict} conflict(s), {missing} unmatched, {bad} malformed.',handoffKeepReport:'Kept current translations; skipped {n} conflict(s).',
+      mergePreview:'Preview conflicts and choose each',mergeKeep:'Keep current, skip conflicts',
+      migrateBtn:'Migrate translations to this version',migrateWrongFile:'Choose old-version translations (a translated Kit ZIP, JSONL, or project JSON).',migrateIntro:'Open the new-version Kit, then pick the old translations; matching uses stable ID and protected source.',migrateAnalyzed:'Difference analysis complete',migrateSafe:'Safe to migrate',migrateSuggestion:'Same source, different ID (suggested)',migrateAmbiguous:'Ambiguous matches',migrateModified:'Source changed',migrateAdded:'New entries',migrateUnchanged:'Unchanged',migrateDeleted:'Removed old entries',migrateApply:'Run migration (fill blanks only)',migrateApplyConfirm:'Migrate old translations into {n} blank entries?',migrateSuggestionConfirm:'Also adopt {n} “same source, different ID” suggestion(s) into blank entries?',migrateNone:'Nothing can be migrated safely.',migrateApplied:'Migrated {n} entry/entries',migrateDeletedHint:'Removed old entries are reported only and never mapped onto other entries.'
     }
   };
   let lang = 'zh';
@@ -405,8 +897,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     for(const n of [20,40,80]) $('pageSize').querySelector(`option[value="${n}"]`).textContent=lang==='en'?`${n} per page`:`每页 ${n} 条`;
     $('themeBtn').textContent=tr(document.body.classList.contains('dark')?'lightTheme':'darkTheme');
     $('saveState').textContent=tr('editable');
-    if(model.zip) {refreshKitInfo();updateCounts();renderList();}
+    if(model.zip) {refreshKitInfo();updateCounts();renderList();updateUndoButtons();updateDraftState();}
     renderTerms();
+    if(!$('panelDrawer').classList.contains('hidden'))renderOpenPanel();
   }
   function refreshKitInfo(){const m=model.manifest; if(!m)return;
     $('kitInfo').textContent=tr('sourceInfo',{sha:String(m.targetStory?.sha256||tr('unknown')).slice(0,18),ver:String(m.sourceVersion||tr('unmarked')),lang:String(m.targetLanguage||tr('unmarkedLanguage'))});
@@ -509,7 +1002,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
   function bytes(str){return enc.encode(str)}
   function csvField(v){const s=String(v==null?'':v);return /[",\r\n]/.test(s)?'"'+s.replaceAll('"','""')+'"':s}
-  function toJsonl(){return model.segments.map(x=>JSON.stringify(x)).join('\n')+(model.segments.length?'\n':'')}
+  // Only the canonical, game-facing fields are written. Editor-only state
+  // (status marks, notes, ignored terms) lives in the project file / draft, so
+  // a Kit export can never be polluted with private metadata.
+  function canonicalSegment(s){
+    const o={};
+    for(const k of CSV_COLUMNS){
+      if(k==='placeholders'){o.placeholders=(s.placeholders||[]).map(p=>({token:p.token,type:p.type,raw:p.raw}));continue;}
+      o[k]=s[k]==null?'':s[k];
+    }
+    return o;
+  }
+  function toJsonl(){return model.segments.map(x=>JSON.stringify(canonicalSegment(x))).join('\n')+(model.segments.length?'\n':'')}
   function toCsv(){let a=[CSV_COLUMNS.join(',')];for(const s of model.segments) a.push(CSV_COLUMNS.map(k=>csvField(k==='placeholders'?(s.placeholders||[]).map(x=>x.token).join(' '):s[k])).join(','));return '\ufeff'+a.join('\r\n')+'\r\n'}
   function csvParse(text){
     const s=text.replace(/^\ufeff/,'');let q=false, field='',row=[],rows=[];
@@ -533,17 +1037,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     $('countText').append(strong,document.createTextNode(tr('filledCount',{total:n.toLocaleString()})));
     $('progressBar').style.width=(n?100*done/n:0).toFixed(2)+'%';
     $('saveState').textContent=tr(model.modified?'unsaved':'exported')+' · '+(warn?tr('phWarningCount',{n:warn}):tr('noPhWarning'));
+    renderStats();
+  }
+  function renderStats(){
+    const grid=$('statsGrid');if(!grid)return;
+    const st=EditorEngine.statusStats(model.segments,model.analysisStale?null:model.safety);
+    const rows=[['statTotal',st.total,false],['statTranslated',st.translated,false],['statUntranslated',st.untranslated,false],['statPercent',st.percent+'%',false],['statProofread',st.proofread,false],['statReviewed',st.reviewed,false],['statFlagged',st.flagged,false],['statIssues',model.analysisStale?'—':st.issues,true]];
+    const frag=document.createDocumentFragment();
+    for(const [key,val,bad] of rows){const d=document.createElement('div');d.className='stat'+(bad&&val!==0&&val!=='—'?' bad':'');const k=document.createElement('div');k.className='k';k.textContent=tr(key);const v=document.createElement('div');v.className='v';v.textContent=String(val);d.append(k,v);frag.append(d);}
+    grid.replaceChildren(frag);
   }
   function updateFilter(){
-    const q=model.query.trim().toLocaleLowerCase();const f=model.filter;
-    model.visible=model.segments.map((s,i)=>({s,i})).filter(({s})=>{
-      if(f==='todo'&&completed(s))return false;
-      if(f==='done'&&!completed(s))return false;
-      if(f==='warn'&&!hasPlaceholderWarning(s))return false;
-      if(q && ![s.protectedSource,s.translation,s.passage,s.unitId].some(v=>String(v??'').toLocaleLowerCase().includes(q)))return false;
-      return true;
-    });
-    if(model.sort==='todo')model.visible.sort((a,b)=>Number(completed(a.s))-Number(completed(b.s))||a.i-b.i);
+    if(model.filter==='issues'||model.filter==='conflict'||model.filter==='duplicate')ensureAnalysis();
+    let visible=EditorEngine.computeView(model.segments,{query:model.query,filter:model.filter,sort:model.sort,term:model.termFilter,
+      issuesByUnit:model.safety,duplicateUnits:model.dupUnits,conflictUnits:model.conflictUnits});
+    if(model.filter==='warn')visible=visible.filter(r=>hasPlaceholderWarning(r.s));
+    model.visible=visible;
     const ps=+$('pageSize').value;const pages=Math.max(1,Math.ceil(model.visible.length/ps));model.page=Math.max(0,Math.min(model.page,pages-1));
   }
   function showPh(text,node){
@@ -557,9 +1066,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const left=document.createElement('div');left.className='item-head-left';
     const no=document.createElement('span');no.className='index';no.textContent='#'+String(index+1).padStart(4,'0');
     const passage=document.createElement('span');passage.className='passage';passage.textContent=s.passage||tr('unnamedPassage');passage.title=s.unitId;
-    left.append(no,passage);const badge=document.createElement('span');badge.className='state';
-    function badgeUpdate(){const warn=hasPlaceholderWarning(s);badge.className='state'+(warn?' warn':completed(s)?' done':'');badge.textContent=tr(warn?'statusWarn':completed(s)?'statusFilled':'statusTodo');}
-    badgeUpdate();head.append(left,badge);
+    left.append(no,passage);
+    const badges=document.createElement('div');badges.style.display='flex';badges.style.gap='6px';badges.style.flexWrap='wrap';
+    const badge=document.createElement('span');badge.className='state';
+    const issueBadge=document.createElement('span');issueBadge.className='state issue';
+    function badgeUpdate(){
+      const warn=hasPlaceholderWarning(s);badge.className='state'+(warn?' warn':completed(s)?' done':'');badge.textContent=tr(warn?'statusWarn':completed(s)?'statusFilled':'statusTodo');
+      const issues=EditorEngine.checkSegmentSafety(s).filter(x=>x.severity!=='info');
+      if(issues.length){issueBadge.hidden=false;issueBadge.textContent='⚠ '+issues.length;issueBadge.title=tr('panelSafety');}else issueBadge.hidden=true;
+    }
+    badgeUpdate();badges.append(issueBadge,badge);head.append(left,badges);
     const body=document.createElement('div');body.className='item-body';
     const label1=document.createElement('div');label1.className='fieldlabel';label1.textContent=tr('sourceLabel');
     const orig=document.createElement('div');orig.className='source';showPh(s.protectedSource,orig);
@@ -579,12 +1095,33 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const warning=document.createElement('span');warning.className='note-bad';
     function warningUpdate(){warning.textContent=hasPlaceholderWarning(s)?tr('placeholderMismatch'):'';}
     warningUpdate();foot.append(hint,warning);
+    // Editor-only status mark + note. Kept in the project file / draft, never in the Kit.
+    const meta=metaOf(s.unitId);
+    const statusRow=document.createElement('div');statusRow.className='item-status';
+    const statusLbl=document.createElement('span');statusLbl.className='fieldlabel';statusLbl.textContent=tr('statusLabel');
+    const statusSel=document.createElement('select');statusSel.className='select';statusSel.setAttribute('aria-label',tr('statusLabel'));
+    for(const st of EditorEngine.STATUSES){const o=document.createElement('option');o.value=st;o.textContent=tr(statusKey(st));statusSel.append(o);}
+    statusSel.value=meta.status;
+    statusSel.addEventListener('change',()=>{
+      const before=metaOf(s.unitId).status;const after=statusSel.value;if(before===after)return;
+      model.seq++;commitEntry({label:tr('statusLabel'),ops:[{unitId:s.unitId,target:'meta',field:'status',before,after}]});
+    });
+    const note=document.createElement('input');note.type='text';note.className='note';note.maxLength=200;note.value=meta.note||'';
+    note.placeholder=tr('notePlaceholder');note.setAttribute('aria-label',tr('noteLabel'));note.title=tr('statusSavedNote');
+    note.addEventListener('focus',()=>{note.dataset.before=metaOf(s.unitId).note||'';});
+    note.addEventListener('blur',()=>{
+      const before=note.dataset.before??'';const after=note.value;if(before===after)return;
+      model.seq++;commitEntry({label:tr('noteLabel'),ops:[{unitId:s.unitId,target:'meta',field:'note',before,after}]});
+    });
+    statusRow.append(statusLbl,statusSel,note);
     function changeTo(next){
       if(String(s.translation??'')===next)return false;
       textarea.value=next;s.translation=next;model.seq++;model.modified=model.seq>model.lastExportSeq;
-      badgeUpdate();warningUpdate();updateCounts();queueDraft();return true;
+      invalidateUnit(s.unitId);
+      badgeUpdate();warningUpdate();updateCounts();queueDraft();refreshAnalysisSoon();return true;
     }
     textarea.addEventListener('input',()=>{changeTo(textarea.value);});
+    textarea.addEventListener('focus',()=>{model.fieldStart={unitId:s.unitId,value:String(s.translation??'')};});
     copyBtn.addEventListener('click',()=>{
       if(completed(s)&&s.translation!==s.protectedSource&&!confirm(tr('confirmCopyOne')))return;
       if(changeTo(s.protectedSource))toast(tr('copiedOne'));
@@ -601,9 +1138,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
     });
     textarea.addEventListener('blur',()=>{
-      if(model.filter!=='all'||model.sort!=='default'||model.query) setTimeout(()=>{if(document.activeElement!==textarea){updateFilter();renderList();}},25);
+      if(model.fieldStart&&model.fieldStart.unitId===s.unitId){
+        const before=model.fieldStart.value;const after=String(s.translation??'');model.fieldStart=null;
+        if(before!==after){model.seq++;commitEntry({label:tr('translationLabel'),ops:[{unitId:s.unitId,target:'seg',field:'translation',before,after}],noApply:true});}
+      }
+      if(model.filter!=='all'||model.sort!=='default'||model.query||model.termFilter) setTimeout(()=>{if(document.activeElement!==textarea){updateFilter();renderList();}},25);
     });
-    tw.append(header,textarea,foot);body.append(label1,orig,copybar,tw);item.append(head,body);return item;
+    tw.append(header,textarea,foot,statusRow);body.append(label1,orig,copybar,tw);item.append(head,body);return item;
   }
   function renderList(){
     updateFilter();const ps=+$('pageSize').value;const start=model.page*ps;const arr=model.visible.slice(start,start+ps);
@@ -620,8 +1161,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function nameBase(){return model.filename.replace(/\.zip$/i,'').replace(/(?:-已翻译|-translated)$/i,'');}
   async function exportFile(kind){
     if(!model.zip||model.saving)return;
-    const warnings=model.segments.filter(hasPlaceholderWarning);
-    if(warnings.length && !confirm(tr('phExportConfirm',{n:warnings.length})))return;
+    const errors=model.segments.filter(s=>EditorEngine.checkSegmentSafety(s).some(i=>i.severity==='error')).length;
+    if(errors && !confirm(tr('exportErrorConfirm',{n:errors})))return;
+    if(!errors){
+      const warnings=model.segments.filter(hasPlaceholderWarning);
+      if(warnings.length && !confirm(tr('phExportConfirm',{n:warnings.length})))return;
+    }
     model.saving=true;$('saveBtn').disabled=true;$('jsonlBtn').disabled=true;
     $('saveState').textContent=tr('generating');const startedSeq=model.seq;
     try{
@@ -664,16 +1209,63 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if(!db){resolve(null);return;}try{const tx=db.transaction('drafts','readonly');const req=tx.objectStore('drafts').get(id);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>resolve(null);}catch{resolve(null);}
   });}
   function queueDraft(){
-    if(!db||!model.draftKey)return;
-    clearTimeout(debounce);const currentKey=model.draftKey;
-    debounce=setTimeout(()=>{
-      try{
-        if(currentKey!==model.draftKey)return;
-        const translations=Object.fromEntries(model.segments.filter(s=>String(s.translation??'')!=='').map(s=>[s.unitId,s.translation]));
-        const tx=db.transaction('drafts','readwrite');tx.objectStore('drafts').put({id:currentKey,translations,updatedAt:Date.now()});
-        tx.onerror=()=>status(tr('draftSaveError'),'warn');
-      }catch{status(tr('draftUnavailable'),'warn');}
-    },700);
+    if(!db||!model.draftKey){setDraftState(db?'idle':'unavailable');return;}
+    clearTimeout(debounce);const currentKey=model.draftKey;setDraftState('saving');
+    debounce=setTimeout(()=>{if(currentKey!==model.draftKey)return;saveDraftNow(currentKey);},700);
+  }
+  function draftPayload(){
+    const translations=Object.fromEntries(model.segments.filter(s=>String(s.translation??'')!=='').map(s=>[s.unitId,s.translation]));
+    const records={};
+    for(const [id,m] of model.meta)if(m&&(m.status!=='unmarked'||m.note))records[id]={status:m.status,note:m.note||''};
+    return {id:model.draftKey,version:2,translations,records,ignoredTerms:[...model.ignoredTerms],exportSeq:model.lastExportSeq,updatedAt:Date.now(),recoveries:[]};
+  }
+  function saveDraftNow(key){
+    if(!db)return;
+    let payload;
+    try{payload=draftPayload();}catch{setDraftState('error');return;}
+    try{
+      const tx=db.transaction('drafts','readwrite');const store=tx.objectStore('drafts');
+      const priorReq=store.get(key);
+      priorReq.onsuccess=()=>{
+        const prior=priorReq.result;
+        if(prior&&prior.translations){
+          const rec=(prior.recoveries||[]).slice(-2);
+          rec.push({translations:prior.translations,updatedAt:prior.updatedAt,records:prior.records||{}});
+          payload.recoveries=rec;
+        }
+        try{store.put(payload);}catch{setDraftState('error');}
+      };
+      tx.oncomplete=()=>{model.draftAt=payload.updatedAt;setDraftState('saved');};
+      tx.onerror=()=>setDraftState('error');
+      tx.onabort=()=>setDraftState('error');
+    }catch{setDraftState('error');}
+  }
+  function setDraftState(state,detail){
+    model.draftState=state;updateDraftState();
+    if(state==='error')status(tr('draftSaveError'),'warn');
+  }
+  function updateDraftState(){
+    const el=$('draftState');if(!el)return;
+    const map={saved:'draftSaved',saving:'draftSaving',error:'draftError',idle:'draftIdle',unavailable:'draftUnavailableShort'};
+    let text=tr(map[model.draftState]||'draftIdle');
+    if(model.draftState==='saved'&&model.draftAt)text+=' · '+tr('draftLastSaved',{time:new Date(model.draftAt).toLocaleTimeString()});
+    el.textContent=text;
+  }
+  function draftDiffCount(previous,segments){
+    const old=previous.translations||{};const recs=previous.records||{};let n=0;
+    for(const s of segments){
+      if(Object.prototype.hasOwnProperty.call(old,s.unitId)&&old[s.unitId]!==s.translation)n++;
+      const r=recs[s.unitId];if(r&&((r.status||'unmarked')!=='unmarked'||r.note))n++;
+    }
+    return n;
+  }
+  function applyDraft(previous,segments){
+    const old=previous.translations||{};const recs=previous.records||{};
+    for(const s of segments)if(Object.prototype.hasOwnProperty.call(old,s.unitId))s.translation=old[s.unitId];
+    model.meta=new Map();
+    for(const [id,r] of Object.entries(recs))if(r)model.meta.set(id,{status:EditorEngine.STATUSES.includes(r.status)?r.status:'unmarked',note:typeof r.note==='string'?r.note:''});
+    model.ignoredTerms=new Set(Array.isArray(previous.ignoredTerms)?previous.ignoredTerms:[]);
+    model.recoveries=Array.isArray(previous.recoveries)?previous.recoveries:[];
   }
   async function loadFile(file){
     if(model.zip&&model.modified&&!confirm(tr('kitChangedConfirm')))return;
@@ -705,19 +1297,24 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
       const draftKey=draftSignature(manifest,segments);const previous=await dbRead(draftKey);let restored=false;
       if(previous&&previous.translations){
-        const old=previous.translations;const diff=segments.filter(s=>Object.prototype.hasOwnProperty.call(old,s.unitId)&&old[s.unitId]!==s.translation);
-        if(diff.length && confirm(tr('draftRecoverConfirm',{date:new Date(previous.updatedAt).toLocaleString(),n:diff.length}))){
-          for(const s of segments)if(Object.prototype.hasOwnProperty.call(old,s.unitId))s.translation=old[s.unitId];
-          restored=true;toast(tr('recoveredDraft'));
+        const diffCount=draftDiffCount(previous,segments);
+        if(diffCount){
+          const choice=await showRestoreDialog(previous,diffCount);
+          if(choice==='restore'){applyDraft(previous,segments);restored=true;toast(tr('recoveredDraft'));}
+          else if(choice==='backup')exportDraftSnapshot(previous,file.name);
         }
       }
       // Commit state after all validations have passed.
       clearTimeout(debounce);model.zip=zip;model.manifest=manifest;model.segments=segments;model.filename=file.name;
-      model.draftKey=draftKey;model.seq=restored?1:0;model.lastExportSeq=0;model.modified=restored;model.page=0;model.query='';model.filter='all';model.sort='default';
-      $('search').value='';$('filter').value='all';$('sort').value='default';$('fileName').textContent=file.name;
+      model.byId=new Map(segments.map(s=>[s.unitId,s]));
+      if(!restored)model.meta=new Map();
+      model.draftKey=draftKey;model.seq=restored?1:0;model.lastExportSeq=0;model.modified=restored;model.page=0;model.query='';model.termFilter='';model.filter='all';model.sort='default';
+      model.hist=[];model.histIndex=-1;model.analysisStale=true;model.safety=new Map();model.termFind=new Map();
+      $('search').value='';$('termFilter').value='';$('filter').value='all';$('sort').value='default';$('fileName').textContent=file.name;
       refreshKitInfo();
+      updateUndoButtons();
       $('drop').classList.add('hidden');$('workspace').classList.remove('hidden');$('saveBtn').disabled=false;$('jsonlBtn').disabled=false;$('handoffBtn').disabled=false;
-      updateCounts();renderList();status(tr('loaded',{n:segments.length.toLocaleString()}));
+      setDraftState('idle');updateCounts();renderList();ensureAnalysis();updateCounts();status(tr('loaded',{n:segments.length.toLocaleString()}));
       window.scrollTo({top:0,behavior:'instant'});
     }catch(e){status(tr('openFail',{error:String(e?.message||e)}),'error');}
     finally{$('file').value='';}
@@ -792,23 +1389,27 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if(file.size>140*1024*1024){status(tr('zipTooLarge'),'warn');$('handoffFile').value='';return;}
     model.importing=true;$('handoffBtn').disabled=true;status(tr('handoffBusy'));
     try{
-      const incoming=validateHandoffEntries(await readHandoffFile(file));
-      const overwrite=$('mergeMode').value==='overwrite';
-      const changes=[];const counts={added:0,overwritten:0,conflicts:0,unchanged:0};
-      for(const current of model.segments){
-        const translated=incoming.get(current.unitId).translation;
-        if(!translated.trim()||translated===current.translation){counts.unchanged++;continue;}
-        if(completed(current)){
-          if(overwrite){changes.push([current,translated]);counts.overwritten++;}
-          else counts.conflicts++;
-        }else{changes.push([current,translated]);counts.added++;}
+      const entries=validateHandoffEntries(await readHandoffFile(file));
+      const incoming=new Map([...entries.values()].map(e=>[e.unitId,String(e.translation??'')]));
+      const mode=$('mergeMode').value;
+      const plan=EditorEngine.planHandoff(model.segments,incoming,mode);
+      status(tr('handoffStats',plan.stats));
+      if(mode==='overwrite'&&plan.stats.conflict&&!confirm(tr('handoffOverwriteConfirm',{n:plan.stats.conflict})))return;
+      if(mode==='preview'){
+        model.previewConflicts=plan.conflicts;
+        model.previewChoices=new Map(plan.conflicts.map(c=>[c.unitId,'keep']));
+        model.previewFill=plan.changes;
+        if(plan.conflicts.length){openPanel('conflict');return;}
+        if(plan.changes.length){const n=applyChanges(plan.changes,tr('handoffBtn'));status(tr('handoffResult',{added:n,overwritten:0,conflicts:0,unchanged:plan.stats.identical}));}
+        else status(tr('handoffNoChanges',{conflicts:0}));
+        return;
       }
-      if(counts.overwritten&&!confirm(tr('handoffOverwriteConfirm',{n:counts.overwritten})))return;
-      if(changes.length){
-        for(const [seg,text] of changes)seg.translation=text;
-        model.seq++;model.modified=model.seq>model.lastExportSeq;model.page=0;
-        updateCounts();renderList();queueDraft();status(tr('handoffResult',counts));
-      }else status(tr('handoffNoChanges',counts));
+      if(plan.changes.length){
+        const n=applyChanges(plan.changes,tr('handoffBtn'));
+        const overwritten=mode==='overwrite'?plan.stats.conflict:0;
+        status(tr('handoffResult',{added:n-overwritten,overwritten,conflicts:plan.conflicts.length,unchanged:plan.stats.identical}));
+      }else status(tr('handoffNoChanges',{conflicts:plan.conflicts.length}));
+      if(mode==='keep'&&plan.conflicts.length){model.previewConflicts=plan.conflicts;model.previewChoices=new Map();model.previewFill=[];openPanel('conflict');}
     }catch(e){status(tr('handoffError',{error:String(e?.message||e)}),'error');}
     finally{model.importing=false;$('handoffBtn').disabled=false;$('handoffFile').value='';}
   }
@@ -823,6 +1424,436 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     model.seq++;model.modified=model.seq>model.lastExportSeq;updateCounts();queueDraft();renderList();
     toast(tr('copiedAll',{n:changed}));
   }
+  // ---------------------------------------------------------------------------
+  // Editor state: status marks, undo/redo history, analysis, panels.
+  // ---------------------------------------------------------------------------
+  function mk(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=text;return n;}
+  function mkBtn(cls,text,onClick){const b=document.createElement('button');b.type='button';b.className=cls;b.textContent=text;if(onClick)b.addEventListener('click',onClick);return b;}
+  function metaOf(unitId){let m=model.meta.get(unitId);if(!m){m={status:'unmarked',note:''};model.meta.set(unitId,m);}return m;}
+  function statusKey(st){return st==='proofread'?'statusProofread':st==='reviewed'?'statusReviewed':st==='flagged'?'statusFlagged':'statusUnmarked';}
+  function segById(id){return model.byId.get(id);}
+
+  // --- undo / redo: sparse before/after records, never a full-project clone ---
+  function applyOps(ops,dir){
+    for(const op of ops){
+      const val=dir==='undo'?op.before:op.after;
+      if(op.target==='meta')metaOf(op.unitId)[op.field]=val;
+      else{const s=segById(op.unitId);if(s)s[op.field]=val;}
+    }
+  }
+  function pushHistory(entry){
+    model.hist.splice(model.histIndex+1);
+    model.hist.push(entry);
+    if(model.hist.length>HIST_LIMIT)model.hist.shift();
+    model.histIndex=model.hist.length-1;
+    updateUndoButtons();
+  }
+  function commitEntry(entry){
+    if(!entry.ops||!entry.ops.length)return;
+    pushHistory(entry);
+    if(!entry.noApply)applyOps(entry.ops,'redo');
+    afterChange();
+  }
+  function afterChange(){
+    model.analysisStale=true;
+    updateCounts();renderList();queueDraft();refreshAnalysisSoon();
+  }
+  function commitPendingField(){const ae=document.activeElement;if(ae&&/^(TEXTAREA|INPUT)$/.test(ae.tagName))ae.blur();}
+  function undo(){
+    commitPendingField();
+    if(model.histIndex<0){toast(tr('undoNothing'));return;}
+    const e=model.hist[model.histIndex];model.seq++;applyOps(e.ops,'undo');model.histIndex--;afterChange();updateUndoButtons();
+    toast(tr('undone',{label:e.label||''}));
+  }
+  function redo(){
+    commitPendingField();
+    if(model.histIndex>=model.hist.length-1)return;
+    model.histIndex++;const e=model.hist[model.histIndex];model.seq++;applyOps(e.ops,'redo');afterChange();updateUndoButtons();
+    toast(tr('redone',{label:e.label||''}));
+  }
+  function updateUndoButtons(){
+    const u=$('undoBtn'),r=$('redoBtn');if(!u)return;
+    u.disabled=model.histIndex<0;r.disabled=model.histIndex>=model.hist.length-1;
+    u.title=model.histIndex>=0?(model.hist[model.histIndex].label||''):tr('undoNothing');
+    const h=$('histState');if(h)h.textContent=model.hist.length?tr('histState',{n:model.hist.length}):tr('histEmpty');
+  }
+  function applyChanges(changes,label){
+    if(!changes||!changes.length)return 0;
+    const ops=[];
+    for(const c of changes){
+      const s=segById(c.unitId);
+      const before=c.before!==undefined?c.before:String(s?s.translation??'':'');
+      ops.push({unitId:c.unitId,target:'seg',field:c.field||'translation',before,after:c.after});
+      const m=metaOf(c.unitId);
+      if(m.status!=='unmarked')ops.push({unitId:c.unitId,target:'meta',field:'status',before:m.status,after:'unmarked'});
+    }
+    model.seq++;
+    commitEntry({label,ops});
+    return changes.length;
+  }
+
+  // --- analysis (safety, terminology, duplicates, conflicts) ---
+  const ANALYSIS_DELAY=600;let analysisTimer=null;
+  function invalidateUnit(unitId){model.safety.delete(unitId);model.termFind.delete(unitId);model.analysisStale=true;}
+  function recomputeAnalysis(){
+    const safety=new Map(),termFind=new Map();
+    const dupGroups=EditorEngine.duplicateGroups(model.segments);
+    const dupUnits=new Set(),conflictUnits=new Set();
+    for(const g of dupGroups){for(const id of g.unitIds)dupUnits.add(id);if(g.divergent)for(const id of g.unitIds)conflictUnits.add(id);}
+    for(const s of model.segments){
+      const si=EditorEngine.checkSegmentSafety(s);if(si.length)safety.set(s.unitId,si);
+      const ti=EditorEngine.checkSegmentTerminology(s,terms,model.ignoredTerms);if(ti.length)termFind.set(s.unitId,ti);
+    }
+    model.safety=safety;model.termFind=termFind;model.dupGroups=dupGroups;model.dupUnits=dupUnits;model.conflictUnits=conflictUnits;model.analysisStale=false;
+  }
+  function ensureAnalysis(){if(model.analysisStale)recomputeAnalysis();}
+  function refreshAnalysisSoon(){
+    clearTimeout(analysisTimer);
+    if(model.segments.length>20000)return; // very large kits: analyze on explicit request only
+    analysisTimer=setTimeout(()=>{if(!model.zip)return;recomputeAnalysis();updateCounts();if(!$('panelDrawer').classList.contains('hidden'))renderOpenPanel();},ANALYSIS_DELAY);
+  }
+  function checkCurrentEntry(){
+    const ae=document.activeElement;let s=null;
+    if(ae&&/^trans-\d+$/.test(ae.id||''))s=model.segments[+ae.id.slice(6)];
+    if(!s){const ps=+$('pageSize').value;const row=model.visible[Math.min(model.page*ps,model.visible.length-1)];if(row)s=row.s;}
+    if(!s)return;
+    const issues=EditorEngine.checkSegmentSafety(s);
+    if(issues.length)model.safety.set(s.unitId,issues);else model.safety.delete(s.unitId);
+    model.analysisStale=true;updateCounts();renderList();renderSafetyPanel();
+    toast(issues.length?tr('safetyFound',{n:issues.length}):tr('safetyOk'));
+  }
+
+  // --- panels (one reused drawer) ---
+  const PANEL_TITLES={safety:'panelSafety',term:'panelTerm',dup:'panelDup',conflict:'panelConflict',project:'panelProject',migrate:'migrateBtn'};
+  function openPanel(kind){model.panelKind=kind;$('panelTitle').textContent=tr(PANEL_TITLES[kind]||'panelSafety');$('panelShade').classList.remove('hidden');$('panelDrawer').classList.remove('hidden');document.body.classList.add('sidebar-open');$('panelDrawer').focus();renderOpenPanel();}
+  function closePanel(){$('panelShade').classList.add('hidden');$('panelDrawer').classList.add('hidden');document.body.classList.remove('sidebar-open');
+    if(model.panelKind==='conflict'){model.previewConflicts=[];model.previewChoices=new Map();model.previewFill=[];}}
+  function renderOpenPanel(){const k=model.panelKind;if(k==='safety')renderSafetyPanel();else if(k==='term')renderTermPanel();else if(k==='dup')renderDupPanel();else if(k==='conflict')renderConflictPanel();else if(k==='project')renderProjectPanel();else if(k==='migrate')renderMigratePanel();}
+  function sevLabel(sev){return sev==='error'?tr('sevError'):sev==='warn'?tr('sevWarn'):tr('sevInfo');}
+  function locateUnit(unitId){
+    closePanel();
+    const idx=model.segments.findIndex(s=>s.unitId===unitId);
+    if(idx<0){status(tr('handoffMissingId',{id:unitId}),'warn');return;}
+    model.query='';model.termFilter='';model.filter='all';model.sort='default';
+    $('search').value='';$('termFilter').value='';$('filter').value='all';$('sort').value='default';
+    updateFilter();
+    const pos=model.visible.findIndex(r=>r.i===idx);
+    const ps=+$('pageSize').value;model.page=Math.max(0,Math.floor(pos/ps));renderList();
+    const node=$('list').querySelectorAll('.item')[pos-model.page*ps];
+    if(node){node.classList.add('focus');node.scrollIntoView({block:'center',behavior:'smooth'});setTimeout(()=>node.classList.remove('focus'),2400);}
+  }
+  function renderSafetyPanel(){
+    ensureAnalysis();
+    const body=$('panelBody');body.replaceChildren();
+    body.append(mk('p','',tr('safetyIntro')));
+    const actions=mk('div','actions');
+    actions.append(
+      mkBtn('btn tiny','✓ '+tr('safetyCheckAll'),()=>{recomputeAnalysis();renderSafetyPanel();updateCounts();toast(tr('safetyFound',{n:model.safety.size}));}),
+      mkBtn('btn tiny flat',tr('safetyCheckCurrent'),checkCurrentEntry),
+    );
+    body.append(actions);
+    const entries=[...model.safety.entries()].filter(([id])=>segById(id));
+    if(!entries.length){body.append(mk('p','',tr('safetyOk')));return;}
+    const stack=mk('div','stack');
+    for(const [id,issues] of entries){
+      const s=segById(id);
+      for(const it of issues){
+        const card=mk('div','issue sev-'+(it.severity||'info'));
+        const h=mk('div','issue-head');
+        h.append(mk('span','sev',sevLabel(it.severity)),mk('span','',(s.passage||tr('unnamedPassage'))+' · '+id));
+        h.append(mkBtn('btn tiny flat',tr('locate'),()=>locateUnit(id)));
+        card.append(h);
+        card.append(mk('div','snip',tr('issue_'+(it.code||''))));
+        if(it.detail)card.append(mk('div','snip','▸ '+it.detail));
+        card.append(mk('div','snip','原文: '+String(s.protectedSource||'').slice(0,140)));
+        stack.append(card);
+      }
+    }
+    body.append(stack);
+  }
+  function renderTermPanel(){
+    const body=$('panelBody');body.replaceChildren();
+    body.append(mk('p','',tr('termIntro')));
+    if(!terms.length){body.append(mk('p','',tr('keywordsEmpty')));return;}
+    const actions=mk('div','actions');
+    actions.append(mkBtn('btn tiny','✓ '+tr('termCheck'),()=>{recomputeAnalysis();renderTermPanel();updateCounts();toast(tr('termFound',{n:model.termFind.size}));}));
+    body.append(actions);
+    const entries=[...model.termFind.entries()].filter(([id])=>segById(id));
+    if(!entries.length){body.append(mk('p','',tr('termNone')));return;}
+    const stack=mk('div','stack');
+    for(const [id,issues] of entries){
+      const s=segById(id);
+      for(const it of issues){
+        const card=mk('div','issue sev-warn');
+        const h=mk('div','issue-head');
+        h.append(mk('span','sev',tr('termExpected')+': '+it.expected),mk('span','',(s.passage||tr('unnamedPassage'))+' · '+id));
+        h.append(mkBtn('btn tiny flat',tr('locate'),()=>locateUnit(id)));
+        card.append(h);
+        card.append(mk('div','snip','「'+it.term+'」 → '+it.expected));
+        const acts=mk('div','actions');
+        acts.append(
+          mkBtn('btn tiny',tr('termApply'),()=>applyTermFix(s,it)),
+          mkBtn('btn tiny flat',tr('termIgnore'),()=>{model.ignoredTerms.add(id+'\u0001'+it.term);recomputeAnalysis();renderTermPanel();updateCounts();toast(tr('termIgnored'));}),
+        );
+        card.append(acts);
+        stack.append(card);
+      }
+    }
+    body.append(stack);
+  }
+  function applyTermFix(s,it){
+    const before=String(s.translation??'');
+    if(!before.includes(it.term))return;
+    if(!confirm(tr('termApplyConfirm',{id:s.unitId,term:it.term,expected:it.expected})))return;
+    const after=before.split(it.term).join(it.expected);
+    commitEntry({label:tr('termApply'),ops:[{unitId:s.unitId,target:'seg',field:'translation',before,after}]});
+    renderTermPanel();
+  }
+  function renderDupPanel(){
+    ensureAnalysis();
+    const body=$('panelBody');body.replaceChildren();
+    body.append(mk('p','',tr('dupIntro')));
+    if(!model.dupGroups.length){body.append(mk('p','',tr('dupNone')));return;}
+    body.append(mk('p','',tr('dupFound',{n:model.dupGroups.length})));
+    const stack=mk('div','stack');
+    for(const g of model.dupGroups){
+      const card=mk('div','dup-group');
+      const h=mk('div','issue-head');
+      h.append(mk('span','sev',tr('dupCount',{n:g.count})),mk('span','',g.divergent?tr('dupDivergent'):tr('dupAllSame')));
+      h.append(mkBtn('btn tiny flat',tr('locate'),()=>locateUnit(g.unitIds[0])));
+      card.append(h);
+      card.append(mk('div','snip',String(g.key).slice(0,180)));
+      if(g.translations.length)card.append(mk('div','snip',g.translations.map(t=>'• '+t).join('\n')));
+      stack.append(card);
+    }
+    body.append(stack);
+    const plan=EditorEngine.planDuplicateFill(model.dupGroups);
+    const btn=mkBtn('btn primary',tr('dupFill'),()=>{
+      if(!plan.changes.length){toast(tr('dupFillNone'));return;}
+      if(!confirm(tr('dupFillConfirm',{n:plan.changes.length,div:plan.divergentGroups})))return;
+      const n=applyChanges(plan.changes,tr('dupFill'));
+      toast(tr('dupFilled',{n}));
+    });
+    btn.disabled=!plan.changes.length;
+    body.append(btn);
+  }
+  function renderConflictPanel(){
+    const body=$('panelBody');body.replaceChildren();
+    body.append(mk('p','',tr('conflictIntro')));
+    const pending=model.previewConflicts||[];
+    if(!pending.length){
+      ensureAnalysis();
+      const diverg=model.dupGroups.filter(g=>g.divergent);
+      if(!diverg.length){body.append(mk('p','',tr('conflictNone')));return;}
+      const stack=mk('div','stack');
+      for(const g of diverg){
+        const card=mk('div','dup-group');
+        const h=mk('div','issue-head');h.append(mk('span','sev',tr('dupCount',{n:g.count})),mk('span','',tr('dupDivergent')));
+        h.append(mkBtn('btn tiny flat',tr('locate'),()=>locateUnit(g.unitIds[0])));
+        card.append(h);
+        card.append(mk('div','snip',String(g.key).slice(0,180)));
+        card.append(mk('div','snip',g.translations.map(t=>'• '+t).join('\n')));
+        stack.append(card);
+      }
+      body.append(stack);
+      return;
+    }
+    const choices=model.previewChoices||new Map();
+    const stack=mk('div','stack');
+    for(const c of pending){
+      const s=segById(c.unitId);
+      const card=mk('div','dup-group');
+      card.append(mk('div','issue-head',(s?.passage||tr('unnamedPassage'))+' · '+c.unitId));
+      card.append(mk('div','snip','原文: '+String(c.source||'').slice(0,160)));
+      card.append(mk('div','snip','当前: '+String(c.current||'').slice(0,160)));
+      card.append(mk('div','snip','导入: '+String(c.incoming||'').slice(0,160)));
+      const pick=mk('div','conflict-pick');
+      for(const [val,label] of [['keep',tr('conflictKeep')],['take',tr('conflictTake')]]){
+        const l=mk('label');const r=document.createElement('input');r.type='radio';r.name='cf-'+c.unitId;r.value=val;r.checked=(choices.get(c.unitId)||'keep')===val;
+        r.addEventListener('change',()=>choices.set(c.unitId,val));
+        l.append(r,document.createTextNode(label));pick.append(l);
+      }
+      card.append(pick);
+      stack.append(card);
+    }
+    body.append(stack);
+    const batch=mk('div','actions');
+    batch.append(mkBtn('btn tiny flat',tr('conflictKeepAll'),()=>{for(const c of pending)choices.set(c.unitId,'keep');renderConflictPanel();}));
+    batch.append(mkBtn('btn tiny flat',tr('conflictApplyAll'),()=>{for(const c of pending)choices.set(c.unitId,'take');renderConflictPanel();}));
+    body.append(batch);
+    body.append(mkBtn('btn primary',tr('conflictApply'),()=>{
+      const extra=[];
+      for(const c of pending)if((choices.get(c.unitId)||'keep')==='take')extra.push({unitId:c.unitId,field:'translation',before:c.current,after:c.incoming});
+      const all=[...(model.previewFill||[]),...extra];
+      const n=applyChanges(all,tr('conflictApply'));
+      model.previewConflicts=[];model.previewChoices=new Map();model.previewFill=[];
+      toast(tr('conflictApplied',{n}));closePanel();
+    }));
+  }
+  function renderProjectPanel(){
+    const body=$('panelBody');body.replaceChildren();
+    body.append(mk('p','',tr('projectHint')));
+    body.append(mk('p','',tr('statusSavedNote')));
+    const info=mk('div','stack');
+    const st=EditorEngine.statusStats(model.segments,model.analysisStale?null:model.safety);
+    info.append(mk('div','snip',tr('statTranslated')+': '+st.translated+' / '+st.total));
+    info.append(mk('div','snip',tr('draftRecoveryPoints',{n:model.recoveries?model.recoveries.length:0})));
+    body.append(info);
+    const row=mk('div','actions');
+    row.append(mkBtn('btn tiny',tr('exportProject'),exportProject));
+    row.append(mkBtn('btn tiny',tr('importProject'),()=>$('projectFile').click()));
+    row.append(mkBtn('btn tiny',tr('migrateBtn'),()=>$('migrateFile').click()));
+    row.append(mkBtn('btn tiny flat',tr('clearDraft'),clearDraft));
+    body.append(row);
+  }
+  function renderMigratePanel(){
+    const body=$('panelBody');body.replaceChildren();
+    body.append(mk('p','',tr('migrateIntro')));
+    const plan=model.migratePlan;
+    if(!plan){body.append(mk('p','',tr('safetyNone')));body.append(mkBtn('btn primary',tr('migrateBtn'),()=>$('migrateFile').click()));return;}
+    body.append(mk('p','',tr('migrateAnalyzed')));
+    const grid=mk('div','stack');
+    const rows=[['migrateSafe',plan.counts.safe],['migrateSuggestion',plan.counts.suggestion],['migrateAmbiguous',plan.counts.ambiguous],['migrateModified',plan.counts.modified],['migrateUnchanged',plan.counts.unchanged],['migrateAdded',plan.counts.added],['migrateDeleted',plan.counts.deleted]];
+    for(const [key,val] of rows)grid.append(mk('div','snip',tr(key)+': '+val));
+    body.append(grid);
+    body.append(mk('p','',tr('migrateDeletedHint')));
+    const apply=mkBtn('btn primary',tr('migrateApply'),()=>{applyMigration(plan);});
+    apply.disabled=!plan.safe.length;
+    body.append(apply);
+  }
+  function applyMigration(plan){
+    if(!plan)return;
+    const changes=[];
+    for(const x of plan.safe){const s=segById(x.unitId);if(s&&!EditorEngine.isCompleted(s))changes.push({unitId:x.unitId,field:'translation',before:String(s.translation??''),after:x.translation});}
+    if(!changes.length){toast(tr('migrateNone'));return;}
+    let withSuggestions=false;
+    if(plan.suggestions.length&&confirm(tr('migrateSuggestionConfirm',{n:plan.suggestions.length}))){
+      withSuggestions=true;
+      for(const x of plan.suggestions){const s=segById(x.unitId);if(s&&!EditorEngine.isCompleted(s))changes.push({unitId:x.unitId,field:'translation',before:String(s.translation??''),after:x.translation});}
+    }
+    if(!confirm(tr('migrateApplyConfirm',{n:changes.length})))return;
+    const n=applyChanges(changes,tr('migrateBtn'));
+    toast(tr('migrateApplied',{n}));
+    status(tr('migrateApplied',{n})+(withSuggestions?' · '+tr('migrateSuggestion'):''));
+    closePanel();
+  }
+
+  // --- modal + draft helpers ---
+  function showModal(opts){
+    return new Promise(resolve=>{
+      $('modalTitle').textContent=opts.title||'';
+      const b=$('modalBody');b.replaceChildren();
+      if(typeof opts.body==='string'){const p=mk('p','',opts.body);b.append(p);}else if(opts.body)b.append(opts.body);
+      const a=$('modalActions');a.replaceChildren();
+      let done=false;
+      const finish=val=>{if(done)return;done=true;$('modalShade').classList.add('hidden');document.removeEventListener('keydown',onKey);resolve(val);};
+      const onKey=e=>{if(e.key==='Escape')finish(opts.escape!==undefined?opts.escape:opts.actions[opts.actions.length-1]?.value);};
+      for(const act of opts.actions){a.append(mkBtn('btn'+(act.primary?' primary':''),act.label,()=>finish(act.value)));}
+      document.addEventListener('keydown',onKey);
+      $('modalShade').classList.remove('hidden');
+      (a.querySelector('button.primary')||a.querySelector('button'))?.focus();
+    });
+  }
+  function showRestoreDialog(previous,diffCount){
+    return showModal({title:tr('restoreTitle'),body:tr('restoreBody',{date:new Date(previous.updatedAt).toLocaleString(),n:diffCount}),escape:'import',actions:[
+      {label:tr('restoreDraft'),value:'restore',primary:true},
+      {label:tr('useImported'),value:'import'},
+      {label:tr('exportDraftBackup'),value:'backup'},
+    ]});
+  }
+  function currentIdentity(){const m=model.manifest||{};const seg=model.segments;return {targetStorySha256:m.targetStory?.sha256||'',inventoryFingerprint:m.inventoryFingerprint||'',schemaVersion:m.schemaVersion||'',targetLanguage:m.targetLanguage||'',exportedCount:seg.length,firstUnitId:seg[0]?.unitId||'',lastUnitId:seg[seg.length-1]?.unitId||''};}
+  function exportDraftSnapshot(previous,name){
+    const doc={format:EditorEngine.PROJECT_FORMAT,version:EditorEngine.PROJECT_VERSION,projectId:model.draftKey||'',identity:currentIdentity(),savedAt:new Date(previous.updatedAt||Date.now()).toISOString(),records:previous.records||{},ignoredTerms:previous.ignoredTerms||[],translations:previous.translations||{},sources:{}};
+    downloadBlob(new Blob([JSON.stringify(doc,null,2)+'\n'],{type:'application/json;charset=utf-8'}),(name||model.filename||'draft').replace(/\.zip$/i,'')+'-draft.dolpkit.json');
+    toast(tr('draftBackupSaved'));
+  }
+  function clearDraft(){
+    if(!model.zip)return;
+    if(!db){status(tr('draftUnavailableShort'),'warn');return;}
+    if(!confirm(tr('clearDraftConfirm1')))return;
+    if(!confirm(tr('clearDraftConfirm2')))return;
+    try{
+      const tx=db.transaction('drafts','readwrite');tx.objectStore('drafts').delete(model.draftKey);
+      tx.oncomplete=()=>{setDraftState('idle');toast(tr('draftCleared'));};
+      tx.onerror=()=>status(tr('draftSaveError'),'warn');
+    }catch{status(tr('draftUnavailableShort'),'warn');}
+  }
+  function exportProject(){
+    if(!model.zip)return;
+    const records={};for(const s of model.segments){const m=model.meta.get(s.unitId);if(m&&(m.status!=='unmarked'||m.note))records[s.unitId]={status:m.status,note:m.note||''};}
+    const translations={},sources={};
+    for(const s of model.segments){sources[s.unitId]=String(s.protectedSource??'');if(String(s.translation??'')!=='')translations[s.unitId]=s.translation;}
+    const doc={format:EditorEngine.PROJECT_FORMAT,version:EditorEngine.PROJECT_VERSION,projectId:model.draftKey,identity:currentIdentity(),savedAt:new Date().toISOString(),exportSeq:model.lastExportSeq,records,ignoredTerms:[...model.ignoredTerms],translations,sources};
+    downloadBlob(new Blob([JSON.stringify(doc,null,2)+'\n'],{type:'application/json;charset=utf-8'}),nameBase()+'.dolpkit.json');
+    toast(tr('projectSaved'));
+  }
+  async function importProject(file){
+    if(!model.zip){status(tr('handoffNoKit'),'warn');return;}
+    try{
+      const doc=JSON.parse(await file.text());
+      const v=EditorEngine.projectValidate(doc);
+      if(!v.ok){status(tr('projectBad'),'error');return;}
+      const self=currentIdentity();const id=doc.identity||{};
+      const same=!!id.targetStorySha256&&id.targetStorySha256===self.targetStorySha256&&id.inventoryFingerprint===self.inventoryFingerprint;
+      const ops=[];let recCount=0;
+      for(const s of model.segments){
+        const r=v.records[s.unitId];if(!r)continue;
+        const m=metaOf(s.unitId);recCount++;
+        if(r.status!==m.status)ops.push({unitId:s.unitId,target:'meta',field:'status',before:m.status,after:r.status});
+        if(r.note!==m.note)ops.push({unitId:s.unitId,target:'meta',field:'note',before:m.note,after:r.note});
+      }
+      for(const key of v.ignoredTerms)model.ignoredTerms.add(key);
+      let filled=0;
+      if(same){
+        const fillChanges=[];
+        for(const s of model.segments){if(String(s.translation??'').trim())continue;const t=v.translations[s.unitId];if(typeof t==='string'&&t.trim())fillChanges.push({unitId:s.unitId,field:'translation',before:String(s.translation??''),after:t});}
+        if(fillChanges.length&&confirm(tr('projectTranslationsConfirm'))){
+          for(const c of fillChanges)ops.push({unitId:c.unitId,target:'seg',field:'translation',before:c.before,after:c.after});
+          filled=fillChanges.length;
+        }
+      }else status(tr('projectMismatch'),'warn');
+      if(ops.length)commitEntry({label:tr('importProject'),ops});else{model.analysisStale=true;updateCounts();}
+      toast(tr('projectLoaded',{n:recCount}));if(filled)toast(tr('projectFilled',{n:filled}));
+    }catch(e){status(tr('projectBad'),'error');}
+    finally{$('projectFile').value='';}
+  }
+  async function readMigrationSource(file){
+    if(file.name.toLowerCase().endsWith('.json')){
+      const doc=JSON.parse(await file.text());
+      const v=EditorEngine.projectValidate(doc);
+      if(!v.ok)throw Error(tr('projectBad'));
+      const sources=doc.sources&&typeof doc.sources==='object'?doc.sources:{};
+      return Object.entries(v.translations).map(([unitId,translation])=>({unitId,translation,protectedSource:sources[unitId]}));
+    }
+    const entries=await readHandoffFile(file);
+    return [...entries.values()].map(e=>({unitId:e.unitId,translation:String(e.translation??''),protectedSource:e.protectedSource}));
+  }
+  async function migrate(file){
+    if(!model.zip){status(tr('handoffNoKit'),'warn');return;}
+    if(!file||!/\.(zip|jsonl|json)$/i.test(file.name)){status(tr('migrateWrongFile'),'warn');$('migrateFile').value='';return;}
+    try{
+      status(tr('handoffBusy'));
+      const oldEntries=await readMigrationSource(file);
+      model.migratePlan=EditorEngine.planMigration(oldEntries,model.segments);
+      openPanel('migrate');
+      status(tr('migrateAnalyzed'));
+    }catch(e){status(tr('handoffError',{error:String(e?.message||e)}),'error');}
+    finally{$('migrateFile').value='';}
+  }
+  function batchMark(){
+    if(!model.zip)return;
+    updateFilter();
+    const target=model.visible.map(r=>r.s);
+    if(!target.length)return;
+    const statusVal=$('batchStatus').value;
+    if(!confirm(tr('markBatchConfirm',{n:target.length,status:tr(statusKey(statusVal))})))return;
+    const ops=[];
+    for(const s of target){const m=metaOf(s.unitId);if(m.status!==statusVal)ops.push({unitId:s.unitId,target:'meta',field:'status',before:m.status,after:statusVal});}
+    if(!ops.length){toast(tr('markedBatch',{n:0}));return;}
+    commitEntry({label:tr('markBatch'),ops});
+    toast(tr('markedBatch',{n:ops.length}));
+  }
+
   // Event wiring.
   for(const id of ['pickBtn','openBtn'])$(id).addEventListener('click',()=>$('file').click());
   $('file').addEventListener('change',e=>loadFile(e.target.files?.[0]));
@@ -896,14 +1927,44 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if(!confirm(tr('deleteAllConfirm2')))return;
     terms.splice(0);saveTerms();renderTerms();toast(tr('termsCleared'));
   });
-  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'&&model.zip){e.preventDefault();exportFile('zip');}});
+  $('undoBtn').addEventListener('click',undo);
+  $('redoBtn').addEventListener('click',redo);
+  $('panelSafetyBtn').addEventListener('click',()=>openPanel('safety'));
+  $('panelTermBtn').addEventListener('click',()=>openPanel('term'));
+  $('panelDupBtn').addEventListener('click',()=>openPanel('dup'));
+  $('panelConflictBtn').addEventListener('click',()=>openPanel('conflict'));
+  $('batchMarkBtn').addEventListener('click',batchMark);
+  $('panelClose').addEventListener('click',closePanel);
+  $('panelShade').addEventListener('click',closePanel);
+  $('termFilter').addEventListener('input',()=>{model.termFilter=$('termFilter').value;model.page=0;renderList();});
+  $('projectFile').addEventListener('change',e=>{const f=e.target.files?.[0];if(f)importProject(f);});
+  $('migrateFile').addEventListener('change',e=>{const f=e.target.files?.[0];if(f)migrate(f);});
+  $('exportProjectBtn').addEventListener('click',exportProject);
+  $('importProjectBtn').addEventListener('click',()=>$('projectFile').click());
+  $('migrateBtn').addEventListener('click',()=>$('migrateFile').click());
+  $('clearDraftBtn').addEventListener('click',clearDraft);
+  $('panelDrawer').addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();closePanel();}});
+  // App-level undo/redo works everywhere except inside a text field, so the
+  // native per-keystroke undo inside the translation textarea keeps working.
+  document.addEventListener('keydown',e=>{
+    if(!(e.ctrlKey||e.metaKey)||e.altKey)return;
+    const inField=/^(INPUT|TEXTAREA)$/.test((e.target&&e.target.tagName)||'');
+    const k=e.key.toLowerCase();
+    if(k==='s'){if(model.zip){e.preventDefault();exportFile('zip');}return;}
+    if(k==='z'){if(inField)return;e.preventDefault();if(e.shiftKey)redo();else undo();return;}
+    if(k==='y'){if(inField)return;e.preventDefault();redo();return;}
+  });
   window.addEventListener('beforeunload',e=>{if(model.modified){e.preventDefault();e.returnValue='';}});
   for(const event of ['dragenter','dragover']){
     document.addEventListener(event,e=>{if(![...e.dataTransfer?.types||[]].includes('Files'))return;e.preventDefault();$('drop').classList.add('drag');});
   }
   for(const event of ['dragleave','drop'])document.addEventListener(event,e=>{if(event==='drop'&&e.dataTransfer?.files?.length){e.preventDefault();loadFile(e.dataTransfer.files[0]);} $('drop').classList.remove('drag');});
   updateLanguage();
-  dbOpen().then(async x=>{db=x;if(!db)status(tr('draftUnavailable'),'warn');else await loadTerms();}).catch(()=>status(tr('draftUnavailable'),'warn'));
+  dbOpen().then(async x=>{db=x;if(!db)status(tr('draftUnavailable'),'warn');else await loadTerms();model.analysisStale=true;if(model.zip)updateCounts();}).catch(()=>status(tr('draftUnavailable'),'warn'));
+  // Guarded test seam: only exposed when a harness sets the flag before boot.
+  if(typeof globalThis!=='undefined'&&globalThis.__DOLP_EDITOR_TEST__===true){
+    globalThis.__DOLP_EDITOR__={model,UI,EditorEngine,loadFile,exportFile,importHandoff,migrate,importProject,exportProject,undo,redo,batchMark,applyChanges,recomputeAnalysis,clearDraft};
+  }
 })();
   </script>
 </body>

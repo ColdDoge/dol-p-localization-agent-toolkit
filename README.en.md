@@ -43,6 +43,40 @@ The prompts are written so an agent can begin in an empty folder, clone this
 repository, read the public contract, and ask only for the user files that are
 actually required.
 
+## Web translation editor (local, offline)
+
+The root-level [`dolp-kit-translation-editor.html`](dolp-kit-translation-editor.html)
+is a self-contained browser editor. Open it with Chrome / Edge; no install and no
+server are needed, and every file is processed locally. It reads the source of a
+`localization-kit.zip`, fills `translation`, checks structure, tracks review
+status, and exports a new ZIP / JSONL for `kit import`.
+
+Highlights:
+
+- Draft autosave with several recovery points; on reopen or re-import you can
+  restore the draft, keep the imported file, or export a draft backup first.
+- Undo / redo: single edits, copy-source, keyword replace, batch import and
+  status marks are undone as one grouped step.
+- Safety check: placeholder count / order / match, and stray macros, variables,
+  tags or links typed into a translation. It only reports and locates, never
+  edits.
+- Search and advanced filters (untranslated / translated / needs proofreading /
+  proofread / flagged / has safety issues / contains a term / translation
+  conflict / duplicate source), unified with sorting and paging, without
+  changing source↔translation correspondence.
+- Progress statistics and status marks (unmarked / needs proofreading /
+  proofread / flagged, plus a short note).
+- Terminology consistency check, duplicate-source detection, and safe merge with
+  a per-item conflict preview.
+- New-version migration: matched by stable ID and protected source, filling
+  blanks only and reporting a classified diff.
+- Chinese / English UI. Status marks and notes live in a separate editor project
+  file (`*.dolpkit.json`) and the browser draft, **never in the game pack**.
+
+See [`docs/网页翻译工具使用指南.md`](docs/网页翻译工具使用指南.md),
+[`docs/翻译数据安全与恢复说明.md`](docs/翻译数据安全与恢复说明.md) and
+[`docs/多人合并与版本迁移指南.md`](docs/多人合并与版本迁移指南.md).
+
 ## What it is not
 
 - It does **not** generate translations. There is no built-in machine
