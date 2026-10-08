@@ -18,5 +18,14 @@ tooling (not vendored, not bundled, not required for offline use):
 * Paisley Park and adb / Android CLI / Chrome DevTools Protocol are separate
   external tools. Each is governed by its own license and terms.
 
+Third-party code bundled **only** in the standalone optional
+`dolp-kit-translation-editor.html` (not in the offline Node.js core):
+
+* JSZip 3.10.1 (https://stuk.github.io/jszip/) — dual MIT / GPLv3;
+  distributed here under the MIT option. Copyright (c) 2009–2016 Stuart Knightley.
+  Its attribution and license notice are retained in the embedded HTML bundle.
+* pako (https://github.com/nodeca/pako) — MIT License; used by
+  the embedded JSZip distribution. Its upstream license terms apply.
+
 Your own game source, target APK, and user-provided localization inputs are
 your responsibility and are never distributed by this repository.

@@ -9,6 +9,19 @@
 它的定位是 **汉化工程工具（localization engineering toolkit）**。
 它负责保护游戏结构和统计覆盖率；**实际译文由用户自己提供**。
 
+## 可视化翻译编辑器（单文件网页）
+
+**[打开 / 下载翻译编辑器 HTML](dolp-kit-translation-editor.html)** · [中文使用指南](docs/翻译编辑器使用指南.md) · [English guide](docs/KIT-EDITOR-GUIDE.en.md)
+
+不习惯直接编辑 CSV / JSONL？可以下载仓库根目录的 `dolp-kit-translation-editor.html`，用 Chrome 或 Edge **在本地打开**（在 GitHub 文件页点击 *Download raw file*）。它是一个无需服务器、无需安装的独立网页，内置 ZIP 读写库；**不会向网络上传 Kit 或译文**。
+
+- 直接打开 `localization-kit-xxx.zip`，只看到原文、占位符和大尺寸译文框；支持中 / 英界面、搜索、分页、未翻译优先与暗色模式。
+- 每条或整包复制原文到译文框；可管理关键词词典并手动替换（独立导入 / 导出 JSON）。
+- 支持把其他译者交回的**同一批条目**的 ZIP / `segments.jsonl` 按 `unitId` 合并；默认只填空白，覆盖已有译文需确认。
+- 导出新 ZIP 时同步 `segments.jsonl` / `segments.csv`，不覆盖原压缩包；草稿和词典存于浏览器本地，**请定期导出文件备份**。
+
+**注意：** 复制原文不等于已完成翻译；占位符提醒也不是完整结构 QA。正式导入和发布仍需 `kit import → qa → strict build` 检查。Toolkit **不负责生成译文**。
+
 ## 从可直接发送的 Agent 提示词开始
 
 如果你使用 Coding Agent，并不需要先记住所有 CLI 命令。选择和自己情况对应的任务，

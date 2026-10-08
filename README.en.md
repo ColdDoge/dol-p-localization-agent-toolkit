@@ -11,6 +11,19 @@ optionally validate the result on a real Android device.
 It is a **localization engineering** tool. It protects game structure and tracks
 coverage; **you supply the translations**.
 
+## Visual translation editor (single offline HTML)
+
+**[Open / download the HTML editor](dolp-kit-translation-editor.html)** · [English user guide](docs/KIT-EDITOR-GUIDE.en.md) · [中文指南](docs/翻译编辑器使用指南.md)
+
+Prefer not to edit `segments.csv` or `segments.jsonl` directly? Save `dolp-kit-translation-editor.html` from the repository root (**Download raw file** on GitHub), then open it locally in Chrome or Edge. The standalone page bundles its ZIP library, needs no server or installation, and does **not upload Kit files or translations**.
+
+- Import a regular, chunked, or repair Kit ZIP. Edit source/translation pairs in larger fields with search, filters, pagination, original/untranslated-first sorting, theme and Chinese/English UI.
+- Copy one or all protected source texts to translation fields; manage a reusable keyword glossary with explicit per-entry replacement and JSON backup.
+- Merge a colleague's matching translated Kit ZIP or `segments.jsonl` by `unitId`. Filling blanks is the default; overwriting current translations requires confirmation.
+- Export a new ZIP with synchronized `segments.jsonl` and `segments.csv`; the original is unchanged. Browser drafts/glossary data are **not a substitute for exported backups**.
+
+**Important:** Copying source text is not equivalent to translation; placeholder warnings are not a full structural validator. Use the normal `kit import → qa → strict build` checks before publication. The toolkit **does not generate translations**.
+
 ## Start with a ready-to-send agent prompt
 
 If you use a coding agent, you do not need to memorize the CLI first. Pick the

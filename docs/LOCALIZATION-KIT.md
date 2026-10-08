@@ -4,6 +4,20 @@
 placeholders, an optional glossary, and the run identity, so a translator can
 fill `translation` and hand the zip back.
 
+## Visual editing (optional)
+
+For translators who prefer source/translation pairs instead of editing CSV or
+JSONL directly, the repository also includes a **standalone offline browser
+editor**: [dolp-kit-translation-editor.html](../dolp-kit-translation-editor.html).
+Read the [English guide](KIT-EDITOR-GUIDE.en.md) or the
+[中文使用指南](翻译编辑器使用指南.md).
+
+It reads a Kit ZIP, preserves manifest/immutable segment fields, exports a new
+ZIP with matching `segments.jsonl` / `segments.csv` translations, and
+accepts a teammate's complete matching ZIP or JSONL as a hand-off.
+This is **not** a translation backend or a replacement for `kit import` / QA.
+Keep exported ZIP and glossary JSON backups; browser drafts are local only.
+
 ## Contents
 
 ```text

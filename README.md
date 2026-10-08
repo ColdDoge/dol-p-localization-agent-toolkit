@@ -7,6 +7,14 @@ optionally validates localization data; **it does not generate translations**.
 面向 DoL / DoLP 及其他 SugarCube / ModI18N 目标的本地、离线优先汉化工程工具。
 它负责导出、检查、导入、构建、版本迁移与可选真机验证；**工具本身不生成译文**。
 
+## 📝 Translation editor / 可视化翻译编辑器
+
+**[Download the offline HTML editor / 下载离线翻译网页](dolp-kit-translation-editor.html)** · [中文使用指南](docs/翻译编辑器使用指南.md) · [English user guide](docs/KIT-EDITOR-GUIDE.en.md)
+
+**EN:** No spreadsheet required. Download the single HTML file from GitHub (**Download raw file**) and open it locally in Chrome / Edge. Import a Kit ZIP, edit source/translation pairs, copy source text, apply a keyword glossary, merge another translator's matching ZIP/JSONL, and export a filled Kit ZIP. Files stay in your browser; run the toolkit's import and QA afterward.
+
+**中文：** 不用面对拥挤的 CSV。下载根目录的单文件 HTML（在 GitHub 页面选“下载原始文件”），用 Chrome / Edge 本地打开即可导入 Kit ZIP、逐条翻译、复制原文、管理关键词及合并别人交接的同源 ZIP/JSONL，最后导出填好的 ZIP。所有文件在浏览器本地处理；**最终仍须经过 Toolkit 导入与 QA**。草稿与词典请定期备份。
+
 ## Quick start / 快速开始
 
 Choose what you want to do, open the prompt in your language, copy the whole
