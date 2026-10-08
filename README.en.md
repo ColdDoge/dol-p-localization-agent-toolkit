@@ -15,16 +15,29 @@ coverage; **you supply the translations**.
 
 ## Visual translation editor (single offline HTML)
 
-**[Open / download the HTML editor](dolp-kit-translation-editor.html)** · [English user guide](docs/KIT-EDITOR-GUIDE.en.md) · [中文指南](docs/翻译编辑器使用指南.md)
+**[Open / download the HTML editor](dolp-kit-translation-editor.html)** · [English user guide](docs/KIT-EDITOR-GUIDE.en.md) · [中文指南](docs/翻译编辑器使用指南.md) · [中文完整功能说明](docs/网页翻译工具使用指南.md)
 
 Prefer not to edit `segments.csv` or `segments.jsonl` directly? Save `dolp-kit-translation-editor.html` from the repository root (**Download raw file** on GitHub), then open it locally in Chrome or Edge. The standalone page bundles its ZIP library, needs no server or installation, and does **not upload Kit files or translations**.
 
-- Import a regular, chunked, or repair Kit ZIP. Edit source/translation pairs in larger fields with search, filters, pagination, original/untranslated-first sorting, theme and Chinese/English UI.
-- Copy one or all protected source texts to translation fields; manage a reusable keyword glossary with explicit per-entry replacement and JSON backup.
-- Merge a colleague's matching translated Kit ZIP or `segments.jsonl` by `unitId`. Filling blanks is the default; overwriting current translations requires confirmation.
-- Export a new ZIP with synchronized `segments.jsonl` and `segments.csv`; the original is unchanged. Browser drafts/glossary data are **not a substitute for exported backups**.
+Basics: import a regular, chunked, or repair Kit ZIP; edit source/translation pairs with search, filters, pagination, original/untranslated-first sorting, theme and Chinese/English UI; copy one or all protected sources; keep a reusable keyword glossary with explicit per-entry replacement and JSON backup; merge a colleague's matching ZIP or `segments.jsonl` by `unitId`; export a new ZIP with synchronized `segments.jsonl` / `segments.csv` (the original is unchanged).
 
-**Important:** Copying source text is not equivalent to translation; placeholder warnings are not a full structural validator. Use the normal `kit import → qa → strict build` checks before publication. The toolkit **does not generate translations**.
+Added features — the nine capabilities of the current editor:
+
+1. **Autosave & recovery** — debounced drafts with several recovery points, a save status that never fakes success, and a restore-draft / use-imported-file / export-backup-first choice when a draft exists; drafts are isolated per project.
+2. **Safety check** — placeholder count / order / match plus stray macros, variables, HTML tags and links typed into a translation; reports, locates and never edits.
+3. **Search & advanced filters** — untranslated / translated / needs proofreading / proofread / flagged / has safety issues / contains a term / translation conflict / duplicate source, combined as raw → search → filter → sort → page.
+4. **Undo / redo** — single edits, copy source, keyword replace, batch import, status marks, hand-off merge and migration are recorded as undoable steps (`Ctrl+Z` / `Ctrl+Shift+Z`, `Ctrl+Y`); the translation box keeps its native per-character undo.
+5. **Safe hand-off merge** — fill blanks only (default) / keep current and skip conflicts / preview each conflict / overwrite after explicit confirmation, with pre-import statistics and an undoable result.
+6. **Progress & status marks** — project-wide statistics (total / translated / untranslated / progress / needs proofreading / proofread / flagged / safety issues) plus per-entry unmarked / needs proofreading / proofread / flagged and a short note, kept out of the game pack.
+7. **Terminology consistency** — checks your keyword glossary against each source term, offers the expected wording, and lets you ignore a warning or apply a confirmed replacement.
+8. **Duplicate source** — groups identical protected sources and fills blanks only; a group with several different translations is skipped until you explicitly choose one.
+9. **New-version migration** — matches old translations to the current Kit by stable ID + protected source, fills blanks only, and reports unchanged / added / removed / source-changed / ambiguous entries without silently overwriting.
+
+**Pagination:** a top and a bottom bar share one page state and show up to nine centred page numbers (clamped at the first and last page), keep previous / next, and add a numeric jump box that accepts Enter and clamps out-of-range input.
+
+**Important:** Copying source text is not equivalent to translation; the built-in checks are advisory, not a full structural validator. Status marks, notes and ignored terms live in a separate `*.dolpkit.json` project file and the browser draft, **never in the game pack**. Use the normal `kit import → qa → strict build` checks before publication. The toolkit **does not generate translations**.
+
+More (Chinese): [translation data safety & recovery](docs/翻译数据安全与恢复说明.md) · [safe merge & version migration](docs/多人合并与版本迁移指南.md) · [feature test report](docs/功能增强测试报告.md).
 
 ## Start with a ready-to-send agent prompt
 
@@ -42,40 +55,6 @@ task that matches your situation and copy the whole prompt:
 The prompts are written so an agent can begin in an empty folder, clone this
 repository, read the public contract, and ask only for the user files that are
 actually required.
-
-## Web translation editor (local, offline)
-
-The root-level [`dolp-kit-translation-editor.html`](dolp-kit-translation-editor.html)
-is a self-contained browser editor. Open it with Chrome / Edge; no install and no
-server are needed, and every file is processed locally. It reads the source of a
-`localization-kit.zip`, fills `translation`, checks structure, tracks review
-status, and exports a new ZIP / JSONL for `kit import`.
-
-Highlights:
-
-- Draft autosave with several recovery points; on reopen or re-import you can
-  restore the draft, keep the imported file, or export a draft backup first.
-- Undo / redo: single edits, copy-source, keyword replace, batch import and
-  status marks are undone as one grouped step.
-- Safety check: placeholder count / order / match, and stray macros, variables,
-  tags or links typed into a translation. It only reports and locates, never
-  edits.
-- Search and advanced filters (untranslated / translated / needs proofreading /
-  proofread / flagged / has safety issues / contains a term / translation
-  conflict / duplicate source), unified with sorting and paging, without
-  changing source↔translation correspondence.
-- Progress statistics and status marks (unmarked / needs proofreading /
-  proofread / flagged, plus a short note).
-- Terminology consistency check, duplicate-source detection, and safe merge with
-  a per-item conflict preview.
-- New-version migration: matched by stable ID and protected source, filling
-  blanks only and reporting a classified diff.
-- Chinese / English UI. Status marks and notes live in a separate editor project
-  file (`*.dolpkit.json`) and the browser draft, **never in the game pack**.
-
-See [`docs/网页翻译工具使用指南.md`](docs/网页翻译工具使用指南.md),
-[`docs/翻译数据安全与恢复说明.md`](docs/翻译数据安全与恢复说明.md) and
-[`docs/多人合并与版本迁移指南.md`](docs/多人合并与版本迁移指南.md).
 
 ## What it is not
 
@@ -297,6 +276,11 @@ Useful reference documents:
 - [Version migration](docs/VERSION-MIGRATION.md)
 - [Protection rules](docs/PROTECTION-RULES.md)
 - [Runtime validation](docs/RUNTIME-VALIDATION.md)
+- [Translation editor user guide](docs/KIT-EDITOR-GUIDE.en.md) — download and basics
+- [Full web-editor feature guide (中文)](docs/网页翻译工具使用指南.md) — all nine features and pagination
+- [Translation data safety & recovery (中文)](docs/翻译数据安全与恢复说明.md)
+- [Safe merge & version migration (中文)](docs/多人合并与版本迁移指南.md)
+- [Feature test report (中文)](docs/功能增强测试报告.md)
 
 ## License
 

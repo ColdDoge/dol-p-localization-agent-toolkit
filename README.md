@@ -15,11 +15,13 @@ optionally validates localization data; **it does not generate translations**.
 
 ## 📝 Translation editor / 可视化翻译编辑器
 
-**[Download the offline HTML editor / 下载离线翻译网页](dolp-kit-translation-editor.html)** · [中文使用指南](docs/翻译编辑器使用指南.md) · [English user guide](docs/KIT-EDITOR-GUIDE.en.md)
+**[Download the offline HTML editor / 下载离线翻译网页](dolp-kit-translation-editor.html)** · [中文使用指南](docs/翻译编辑器使用指南.md) · [中文完整功能说明](docs/网页翻译工具使用指南.md) · [English user guide](docs/KIT-EDITOR-GUIDE.en.md)
 
-**EN:** No spreadsheet required. Download the single HTML file from GitHub (**Download raw file**) and open it locally in Chrome / Edge. Import a Kit ZIP, edit source/translation pairs, copy source text, apply a keyword glossary, merge another translator's matching ZIP/JSONL, and export a filled Kit ZIP. Files stay in your browser; run the toolkit's import and QA afterward.
+**EN:** No spreadsheet required. Download the single HTML file from GitHub (**Download raw file**) and open it locally in Chrome / Edge — everything stays in your browser. Beyond the basics (import a Kit ZIP, edit source/translation pairs, keyword glossary, hand off another translator's matching ZIP/JSONL, export a filled ZIP) the editor now includes: draft autosave with recovery points and a restore / use-imported / export-backup choice; undo / redo for every edit (single edit, copy source, keyword replace, batch import, status marks); a safety check (placeholder count / order / match, stray macros, variables and tags) that only reports and locates; search plus advanced filters (untranslated / translated / needs proofreading / proofread / flagged / has safety issues / contains a term / translation conflict / duplicate source); project-wide progress statistics and per-entry status marks + notes; terminology consistency checking; duplicate-source detection with a fill-blanks-only action; safe hand-off merge (fill blanks / keep current and skip conflicts / preview each conflict / overwrite after confirmation); and new-version translation migration. Pagination shows up to nine centred page numbers with previous / next and a numeric jump box (Enter supported) in both a top and a bottom bar that share one page state. New-version migration matches by stable ID + protected source and only fills blanks. Status marks, notes and ignored terms live in a separate `*.dolpkit.json` project file and the browser draft, never in the game pack. Run the toolkit's `kit import` → `qa` → `strict build` afterward.
 
-**中文：** 不用面对拥挤的 CSV。下载根目录的单文件 HTML（在 GitHub 页面选“下载原始文件”），用 Chrome / Edge 本地打开即可导入 Kit ZIP、逐条翻译、复制原文、管理关键词及合并别人交接的同源 ZIP/JSONL，最后导出填好的 ZIP。所有文件在浏览器本地处理；**最终仍须经过 Toolkit 导入与 QA**。草稿与词典请定期备份。
+**中文：** 不用面对拥挤的 CSV。下载根目录的单文件 HTML（在 GitHub 页面选“下载原始文件”），用 Chrome / Edge 本地打开，所有文件只在本地处理。除基础知识（导入 Kit ZIP、逐条翻译、关键词词典、合并同源 ZIP/JSONL、导出填好的 ZIP）外，编辑器现已包含：草稿自动保存与多个恢复点（可选择恢复草稿 / 使用导入文件 / 先导出草稿备份）；覆盖所有编辑的撤销 / 重做（单条编辑、复制原文、术语替换、批量导入、状态标记）；安全检查（占位符数量 / 顺序 / 匹配，以及译文里意外的宏 / 变量 / HTML 标签，只提示并定位）；搜索与高级筛选（未翻译 / 已翻译 / 待校对 / 已校对 / 存疑 / 存在安全问题 / 包含指定术语 / 存在翻译冲突 / 存在重复原文）；整包进度统计与逐条状态标记 + 备注；术语一致性检查；重复原文识别（仅填空白）；安全合并（只填空白 / 保留当前跳过冲突 / 预览冲突逐条选择 / 确认后覆盖）；新版本翻译迁移。分页在顶部与底部各有一套同步导航，最多 9 个居中页码，保留上一页 / 下一页并支持数字跳页（可回车），共享同一页码状态。状态、备注与忽略项只保存在独立的 `*.dolpkit.json` 工程文件和浏览器草稿里，绝不写入游戏翻译包。最后仍须经过 Toolkit 的 `kit import` → `qa` → `strict build` 检查。
+
+更多说明 / More: [翻译数据安全与恢复说明](docs/翻译数据安全与恢复说明.md) · [多人合并与版本迁移指南](docs/多人合并与版本迁移指南.md) · [功能增强测试报告](docs/功能增强测试报告.md)
 
 ## Quick start / 快速开始
 
@@ -42,28 +44,6 @@ prompt, and send it to your coding agent.
 >
 > 这些提示词可以从空文件夹开始：Agent 会自行克隆仓库、读取公开工作流，并避免把
 > 用户汉化数据提交进 Git 历史。
-
-## Web translation editor / 网页翻译编辑器
-
-Besides the offline CLI, the repository ships a self-contained, local browser
-editor at [`dolp-kit-translation-editor.html`](dolp-kit-translation-editor.html).
-Open it in Chrome / Edge: it reads a `localization-kit.zip`, lets you fill
-`translation`, checks structure and placeholders, tracks review status, and
-exports a new ZIP / JSONL. It adds draft autosave and recovery, undo / redo,
-search and advanced filters, safety / terminology / duplicate / conflict panels,
-safe merge, and new-version migration. Editor state lives in a separate project
-file and the browser draft, never in the game pack.
-
-除离线 CLI 外，仓库根目录还提供一个自包含的本地网页翻译编辑器
-[`dolp-kit-translation-editor.html`](dolp-kit-translation-editor.html)：用
-Chrome / Edge 打开即可读取 `localization-kit.zip`、填写译文、检查结构与占位符、
-标记校对状态，并导出新的 ZIP / JSONL。新增功能包括草稿自动保存与恢复、
-撤销 / 重做、搜索与高级筛选、安全 / 术语 / 重复原文 / 冲突面板、安全合并与
-新版本迁移。编辑状态保存在独立的工程文件和浏览器草稿中，不会写入游戏翻译包。
-
-Guides / 指南：[网页翻译工具使用指南](docs/网页翻译工具使用指南.md) ·
-[翻译数据安全与恢复说明](docs/翻译数据安全与恢复说明.md) ·
-[多人合并与版本迁移指南](docs/多人合并与版本迁移指南.md)
 
 ## Full documentation / 完整说明
 
